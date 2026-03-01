@@ -303,17 +303,13 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 					}
 				}
 
-				// OPTIMIZATION: If we have the cached client and multiple search queries
-				// (mood expansion), fetch the complete collection ONCE and filter in-memory
-				// for all query variants. This avoids re-paginating the entire collection
-				// for each mood-expanded search term.
-				//
-				// Before: 4 mood queries x 10 pages = 40 API calls
-				// After:  1 complete collection fetch (cached) = 0-11 API calls
+				// OPTIMIZATION: When cached client is available, fetch the complete
+				// collection ONCE and filter in-memory for all query variants.
+				// This avoids paginating the entire collection via API for every search.
 				const allResults: DiscogsCollectionItem[] = []
 				const seenReleaseIds = new Set<string>()
 
-				if (cachedClient && searchQueries.length > 1) {
+				if (cachedClient) {
 					// Fetch complete collection once (cached for 45 min)
 					const allReleases = await cachedClient.getCompleteCollectionReleases(
 						userProfile.username,

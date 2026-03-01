@@ -132,9 +132,9 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions =
 				retryAfterMs = parseRetryAfter(retryAfterHeader)
 			}
 
-			// If error is a ResponseError, check the response for Retry-After header
+			// If error is a ResponseError, check for Retry-After header
 			if (error instanceof ResponseError) {
-				const retryAfterHeader = error.response.headers.get('Retry-After')
+				const retryAfterHeader = error.headers.get('Retry-After')
 				retryAfterMs = parseRetryAfter(retryAfterHeader)
 			}
 
@@ -158,9 +158,13 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions =
  * Custom error class to preserve response information
  */
 class ResponseError extends Error {
-	constructor(public response: Response) {
-		super(`HTTP ${response.status}: ${response.statusText}`)
+	public status: number
+	public headers: Headers
+	constructor(response: Response, body?: string) {
+		super(`HTTP ${response.status}: ${response.statusText}${body ? ` - ${body.slice(0, 200)}` : ''}`)
 		this.name = 'ResponseError'
+		this.status = response.status
+		this.headers = response.headers
 	}
 }
 
@@ -172,10 +176,10 @@ export async function fetchWithRetry(url: string, init?: RequestInit, retryOptio
 		async () => {
 			const response = await fetch(url, init)
 
-			// Throw a ResponseError for non-OK responses
-			// This allows us to access the response in retry logic
+			// Read the body to prevent Cloudflare Workers stalled response deadlock
 			if (!response.ok) {
-				throw new ResponseError(response)
+				const body = await response.text()
+				throw new ResponseError(response, body)
 			}
 
 			return response
@@ -185,9 +189,7 @@ export async function fetchWithRetry(url: string, init?: RequestInit, retryOptio
 			shouldRetry: (error, _attempt) => {
 				// Check if it's a ResponseError
 				if (error instanceof ResponseError) {
-					const status = error.response.status
-					// Always retry 429 and 5xx errors
-					return status === 429 || status >= 500
+					return error.status === 429 || error.status >= 500
 				}
 
 				// Check if it's a raw Response (for backward compatibility)
