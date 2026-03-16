@@ -59,7 +59,34 @@ export const DiscogsOAuthHandler = {
 // ── Stub implementations (filled in subsequent tasks) ──────────────────────────
 
 async function handleAuthorize(request: Request, env: OAuthEnv): Promise<Response> {
-  return new Response('Not implemented', { status: 501 })
+  try {
+    const oauthReqInfo: AuthRequest = await env.OAUTH_PROVIDER.parseAuthRequest(request)
+
+    const url = new URL(request.url)
+    const callbackUrl = `${url.protocol}//${url.host}/discogs-callback`
+
+    const discogsAuth = new DiscogsAuth(env.DISCOGS_CONSUMER_KEY, env.DISCOGS_CONSUMER_SECRET)
+    const { oauth_token: requestToken, oauth_token_secret: requestTokenSecret } =
+      await discogsAuth.getRequestToken(callbackUrl)
+
+    // Store pending state: correlate Discogs oauth_token with our OAuth 2.1 request
+    await env.MCP_SESSIONS.put(
+      `oauth-pending:${requestToken}`,
+      JSON.stringify({ oauthReqInfo, requestTokenSecret }),
+      { expirationTtl: 600 }, // 10 minutes
+    )
+
+    return Response.redirect(
+      `https://www.discogs.com/oauth/authorize?oauth_token=${requestToken}`,
+      302,
+    )
+  } catch (error) {
+    console.error('[OAUTH] /authorize error:', error)
+    return new Response(
+      `<html><body><h1>Authorization Error</h1><p>${error instanceof Error ? error.message : 'Unknown error'}</p><p><a href="/authorize">Try again</a></p></body></html>`,
+      { status: 500, headers: { 'Content-Type': 'text/html' } },
+    )
+  }
 }
 
 async function handleDiscogsCallback(request: Request, env: OAuthEnv): Promise<Response> {
