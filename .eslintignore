@@ -1,0 +1,2 @@
+# Legacy entry point — kept for rollback, excluded from tsconfig
+src/index.ts
