@@ -201,3 +201,12 @@ dist/
 
 # Git worktrees
 .worktrees/
+
+# AI tool files (personal/local)
+.opencode/
+.devtools/
+.vscode/
+skills-lock.json
+
+# Old development artifacts
+development/
