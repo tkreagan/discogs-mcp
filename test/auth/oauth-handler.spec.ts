@@ -142,3 +142,114 @@ describe('/discogs-callback', () => {
     expect(res.status).toBe(400)
   })
 })
+
+describe('/login (manual path)', () => {
+  it('redirects to discogs.com/oauth/authorize', async () => {
+    const req = new Request('https://example.com/login?session_id=test-session')
+    const ctx = createExecutionContext()
+    const res = await DiscogsOAuthHandler.fetch(req, env as any, ctx)
+    await waitOnExecutionContext(ctx)
+
+    expect(res.status).toBe(302)
+    const location = res.headers.get('Location') ?? ''
+    expect(location).toContain('discogs.com/oauth/authorize')
+  })
+
+  it('sets a CSRF cookie', async () => {
+    const req = new Request('https://example.com/login?session_id=test-session')
+    const ctx = createExecutionContext()
+    const res = await DiscogsOAuthHandler.fetch(req, env as any, ctx)
+    await waitOnExecutionContext(ctx)
+
+    const cookie = res.headers.get('Set-Cookie') ?? ''
+    expect(cookie).toContain('csrf')
+  })
+
+  it('stores pending login state in KV', async () => {
+    const req = new Request('https://example.com/login?session_id=test-session-kv')
+    const ctx = createExecutionContext()
+    await DiscogsOAuthHandler.fetch(req, env as any, ctx)
+    await waitOnExecutionContext(ctx)
+
+    const stored = await env.MCP_SESSIONS.get('login-pending:test-session-kv')
+    expect(stored).not.toBeNull()
+    const data = JSON.parse(stored!)
+    expect(data.csrfToken).toBeDefined()
+    expect(data.requestToken).toBeDefined()
+    expect(data.requestTokenSecret).toBeDefined()
+  })
+})
+
+describe('/callback (manual path)', () => {
+  it('returns 400 when login-pending KV entry is missing', async () => {
+    const req = new Request(
+      'https://example.com/callback?session_id=no-such-session&oauth_token=x&oauth_verifier=y',
+    )
+    const ctx = createExecutionContext()
+    const res = await DiscogsOAuthHandler.fetch(req, env as any, ctx)
+    await waitOnExecutionContext(ctx)
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 403 when CSRF token is missing', async () => {
+    const csrfToken = 'test-csrf-token'
+    await env.MCP_SESSIONS.put(
+      'login-pending:csrf-test',
+      JSON.stringify({
+        sessionId: 'csrf-test',
+        csrfToken,
+        requestToken: 'tok',
+        requestTokenSecret: 'sec',
+        fromMcpClient: true,
+        timestamp: Date.now(),
+      }),
+    )
+    const req = new Request(
+      'https://example.com/callback?session_id=csrf-test&oauth_token=tok&oauth_verifier=x',
+      // No cookie
+    )
+    const ctx = createExecutionContext()
+    const res = await DiscogsOAuthHandler.fetch(req, env as any, ctx)
+    await waitOnExecutionContext(ctx)
+    expect(res.status).toBe(403)
+  })
+
+  it('stores session in KV and returns HTML success page when CSRF is valid', async () => {
+    const csrfToken = 'valid-csrf-token'
+    await env.MCP_SESSIONS.put(
+      'login-pending:happy-path',
+      JSON.stringify({
+        sessionId: 'happy-path',
+        csrfToken,
+        requestToken: 'mock-request-token',
+        requestTokenSecret: 'mock-request-secret',
+        fromMcpClient: true,
+        timestamp: Date.now(),
+      }),
+    )
+
+    // Mock identity fetch
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 99, username: 'happyuser' }),
+    })
+
+    // URL is https so cookie name is __Host-csrf
+    const req = new Request(
+      'https://example.com/callback?session_id=happy-path&oauth_token=mock-request-token&oauth_verifier=mock-verifier',
+      { headers: { Cookie: `__Host-csrf=${csrfToken}` } },
+    )
+    const ctx = createExecutionContext()
+    const res = await DiscogsOAuthHandler.fetch(req, env as any, ctx)
+    await waitOnExecutionContext(ctx)
+
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Authentication Successful')
+
+    const session = await env.MCP_SESSIONS.get('session:happy-path')
+    expect(session).not.toBeNull()
+    const sessionData = JSON.parse(session!)
+    expect(sessionData.username).toBe('happyuser')
+  })
+})
