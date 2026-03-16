@@ -26,14 +26,14 @@ A powerful **Model Context Protocol (MCP) server** that enables AI assistants to
 2. Click **Add Integration**
 3. Enter the URL:
    ```
-   https://discogs-mcp-prod.rian-db8.workers.dev/mcp
+   https://discogs-mcp.com/mcp
    ```
 4. Click **Add** - authenticate with Discogs when prompted
 
 ### Claude Code
 
 ```bash
-claude mcp add --transport http discogs https://discogs-mcp-prod.rian-db8.workers.dev/mcp
+claude mcp add --transport http discogs https://discogs-mcp.com/mcp
 ```
 
 ### Windsurf
@@ -42,18 +42,18 @@ Add to your Windsurf MCP config (`~/.codeium/windsurf/mcp_config.json`):
 
 ```json
 {
-  "mcpServers": {
-    "discogs": {
-      "serverUrl": "https://discogs-mcp-prod.rian-db8.workers.dev/mcp"
-    }
-  }
+	"mcpServers": {
+		"discogs": {
+			"serverUrl": "https://discogs-mcp.com/mcp"
+		}
+	}
 }
 ```
 
 ### MCP Inspector (Testing)
 
 ```bash
-npx @modelcontextprotocol/inspector https://discogs-mcp-prod.rian-db8.workers.dev/mcp
+npx @modelcontextprotocol/inspector https://discogs-mcp.com/mcp
 ```
 
 ### Other MCP Clients
@@ -62,12 +62,12 @@ npx @modelcontextprotocol/inspector https://discogs-mcp-prod.rian-db8.workers.de
 
 ```json
 {
-  "mcpServers": {
-    "discogs": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "https://discogs-mcp-prod.rian-db8.workers.dev/mcp"]
-    }
-  }
+	"mcpServers": {
+		"discogs": {
+			"command": "npx",
+			"args": ["-y", "mcp-remote", "https://discogs-mcp.com/mcp"]
+		}
+	}
 }
 ```
 
@@ -84,21 +84,21 @@ This server uses **MCP OAuth 2.1** with Discogs as the identity provider. When y
 
 ### 🔓 Public Tools (No Authentication Required)
 
-| Tool | Description |
-|------|-------------|
-| `ping` | Test server connectivity |
-| `server_info` | Get server information and capabilities |
+| Tool          | Description                                            |
+| ------------- | ------------------------------------------------------ |
+| `ping`        | Test server connectivity                               |
+| `server_info` | Get server information and capabilities                |
 | `auth_status` | Check authentication status and get login instructions |
 
 ### 🔐 Authenticated Tools (Requires Login)
 
-| Tool | Description |
-|------|-------------|
-| `search_collection` | Search your collection with intelligent mood and genre matching |
-| `get_release` | Get detailed information about a specific release |
-| `get_collection_stats` | View comprehensive collection statistics |
-| `get_recommendations` | Get context-aware music recommendations |
-| `get_cache_stats` | Monitor cache performance (development) |
+| Tool                   | Description                                                     |
+| ---------------------- | --------------------------------------------------------------- |
+| `search_collection`    | Search your collection with intelligent mood and genre matching |
+| `get_release`          | Get detailed information about a specific release               |
+| `get_collection_stats` | View comprehensive collection statistics                        |
+| `get_recommendations`  | Get context-aware music recommendations                         |
+| `get_cache_stats`      | Monitor cache performance (development)                         |
 
 ## 📚 MCP Resources
 
@@ -121,6 +121,7 @@ discogs://search?q={query}       # Search results
 ### Local Setup
 
 1. **Clone and install**:
+
    ```bash
    git clone https://github.com/rianvdm/discogs-mcp.git
    cd discogs-mcp
@@ -128,6 +129,7 @@ discogs://search?q={query}       # Search results
    ```
 
 2. **Configure environment**:
+
    ```bash
    # Set your Discogs API credentials as Wrangler secrets
    wrangler secret put DISCOGS_CONSUMER_KEY
@@ -135,6 +137,7 @@ discogs://search?q={query}       # Search results
    ```
 
 3. **Start development server**:
+
    ```bash
    npm run dev
    ```
@@ -147,6 +150,7 @@ discogs://search?q={query}       # Search results
 ## 🚀 Deployment
 
 1. **Create KV namespaces** and add their IDs to `wrangler.toml` under `[env.production]`:
+
    ```bash
    wrangler kv namespace create MCP_SESSIONS --env production
    wrangler kv namespace create MCP_LOGS --env production
@@ -155,6 +159,7 @@ discogs://search?q={query}       # Search results
    ```
 
 2. **Set production secrets**:
+
    ```bash
    wrangler secret put DISCOGS_CONSUMER_KEY --env production
    wrangler secret put DISCOGS_CONSUMER_SECRET --env production

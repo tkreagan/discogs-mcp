@@ -208,7 +208,7 @@ function filterReleasesInMemory(
  * Get authentication instructions for unauthenticated requests
  */
 function generateAuthInstructions(connectionId?: string): string {
-	const baseUrl = 'https://discogs-mcp-prod.rian-db8.workers.dev'
+	const baseUrl = 'https://discogs-mcp.com'
 	const loginUrl = connectionId ? `${baseUrl}/login?connection_id=${connectionId}` : `${baseUrl}/login`
 
 	return `🔐 **Authentication Required**
@@ -275,23 +275,67 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 
 		// Known music-specific terms that indicate a concrete/literal search
 		const concreteTerms = new Set([
-			'rock', 'jazz', 'blues', 'electronic', 'techno', 'house', 'metal', 'punk',
-			'folk', 'country', 'classical', 'hip-hop', 'rap', 'soul', 'funk', 'disco',
-			'reggae', 'ska', 'indie', 'alternative', 'psychedelic', 'experimental',
-			'ambient', 'downtempo', 'trance', 'dubstep', 'garage', 'post-rock',
-			'post-punk', 'new wave', 'synthpop', 'industrial', 'gothic', 'shoegaze',
-			'grunge', 'hardcore', 'r&b', 'pop', 'latin', 'world', 'soundtrack',
-			'vinyl', 'cd', 'cassette', '7"', '12"', 'lp',
+			'rock',
+			'jazz',
+			'blues',
+			'electronic',
+			'techno',
+			'house',
+			'metal',
+			'punk',
+			'folk',
+			'country',
+			'classical',
+			'hip-hop',
+			'rap',
+			'soul',
+			'funk',
+			'disco',
+			'reggae',
+			'ska',
+			'indie',
+			'alternative',
+			'psychedelic',
+			'experimental',
+			'ambient',
+			'downtempo',
+			'trance',
+			'dubstep',
+			'garage',
+			'post-rock',
+			'post-punk',
+			'new wave',
+			'synthpop',
+			'industrial',
+			'gothic',
+			'shoegaze',
+			'grunge',
+			'hardcore',
+			'r&b',
+			'pop',
+			'latin',
+			'world',
+			'soundtrack',
+			'vinyl',
+			'cd',
+			'cassette',
+			'7"',
+			'12"',
+			'lp',
 		])
 
 		// If ALL non-trivial words are concrete music/format terms, it's literal
 		const words = q.split(/\s+/).filter((w) => w.length > 2)
-		const allConcrete = words.length > 0 && words.every((w) => {
-			// Check concrete terms, decade patterns, temporal terms
-			return concreteTerms.has(w) ||
-				/^\d{4}s?$/.test(w) ||
-				['recent', 'recently', 'new', 'newest', 'latest', 'old', 'oldest', 'earliest'].includes(w)
-		})
+		const allConcrete =
+			words.length > 0 &&
+			words.every((w) => {
+				// Check concrete terms, decade patterns, temporal terms
+				return (
+					concreteTerms.has(w) ||
+					/^\d{4}s?$/.test(w) ||
+					['recent', 'recently', 'new', 'newest', 'latest', 'old', 'oldest', 'earliest'].includes(w)
+				)
+			})
 		if (allConcrete) return false
 
 		// If mood mapping has high confidence, the existing pipeline handles it

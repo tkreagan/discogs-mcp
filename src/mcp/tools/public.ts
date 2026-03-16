@@ -2,88 +2,69 @@
  * Public tools - available without authentication
  * These tools can be called by anyone and don't require Discogs authentication
  */
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-import type { Env } from "../../types/env.js";
-import type { SessionContext } from "../server.js";
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
+import type { Env } from '../../types/env.js'
+import type { SessionContext } from '../server.js'
 
 /**
  * Generate authentication URL with connection ID if available
  */
 function getAuthUrl(connectionId?: string): string {
-	const baseUrl = "https://discogs-mcp-prod.rian-db8.workers.dev";
-	return connectionId
-		? `${baseUrl}/login?connection_id=${connectionId}`
-		: `${baseUrl}/login`;
+	const baseUrl = 'https://discogs-mcp.com'
+	return connectionId ? `${baseUrl}/login?connection_id=${connectionId}` : `${baseUrl}/login`
 }
 
 /**
  * Register all public tools that don't require authentication
  */
-export function registerPublicTools(
-	server: McpServer,
-	env: Env,
-	getSessionContext: () => Promise<SessionContext>
-): void {
+export function registerPublicTools(server: McpServer, env: Env, getSessionContext: () => Promise<SessionContext>): void {
 	// Ping tool - simple connectivity test
 	server.tool(
-		"ping",
-		"Test connectivity to the Discogs MCP server",
+		'ping',
+		'Test connectivity to the Discogs MCP server',
 		{
-			message: z
-				.string()
-				.optional()
-				.default("Hello from Discogs MCP!")
-				.describe("Message to echo back"),
+			message: z.string().optional().default('Hello from Discogs MCP!').describe('Message to echo back'),
 		},
 		async ({ message }) => {
 			return {
 				content: [
 					{
-						type: "text",
+						type: 'text',
 						text: `Pong! You said: ${message}`,
 					},
 				],
-			};
-		}
-	);
+			}
+		},
+	)
 
 	// Server info tool - get server details
-	server.tool(
-		"server_info",
-		"Get information about the Discogs MCP server",
-		{},
-		async () => {
-			const { connectionId } = await getSessionContext();
-			const authUrl = getAuthUrl(connectionId);
+	server.tool('server_info', 'Get information about the Discogs MCP server', {}, async () => {
+		const { connectionId } = await getSessionContext()
+		const authUrl = getAuthUrl(connectionId)
 
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Discogs MCP Server v1.0.0\n\nStatus: Running\nProtocol: MCP 2024-11-05\nFeatures:\n- Resources: Collection, Releases, Search\n- Authentication: OAuth 1.0a\n- Rate Limiting: Enabled\n\nTo get started, authenticate at ${authUrl}`,
+				},
+			],
+		}
+	})
+
+	// Auth status tool - check authentication status
+	server.tool('auth_status', 'Check authentication status and get login instructions if needed', {}, async () => {
+		const { session, connectionId } = await getSessionContext()
+		const loginUrl = getAuthUrl(connectionId)
+
+		// Check if user is authenticated
+		if (session) {
 			return {
 				content: [
 					{
-						type: "text",
-						text: `Discogs MCP Server v1.0.0\n\nStatus: Running\nProtocol: MCP 2024-11-05\nFeatures:\n- Resources: Collection, Releases, Search\n- Authentication: OAuth 1.0a\n- Rate Limiting: Enabled\n\nTo get started, authenticate at ${authUrl}`,
-					},
-				],
-			};
-		}
-	);
-
-	// Auth status tool - check authentication status
-	server.tool(
-		"auth_status",
-		"Check authentication status and get login instructions if needed",
-		{},
-		async () => {
-			const { session, connectionId } = await getSessionContext();
-			const loginUrl = getAuthUrl(connectionId);
-
-			// Check if user is authenticated
-			if (session) {
-				return {
-					content: [
-						{
-							type: "text",
-							text: `✅ **Authentication Status: Authenticated**
+						type: 'text',
+						text: `✅ **Authentication Status: Authenticated**
 
 You are successfully authenticated with Discogs!
 
@@ -97,17 +78,17 @@ You are successfully authenticated with Discogs!
 - get_collection_stats: View collection statistics
 - get_recommendations: Get personalized recommendations
 - get_cache_stats: View cache performance`,
-						},
-					],
-				};
+					},
+				],
 			}
+		}
 
-			// Not authenticated
-			return {
-				content: [
-					{
-						type: "text",
-						text: `🔐 **Authentication Status: Not Authenticated**
+		// Not authenticated
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `🔐 **Authentication Status: Not Authenticated**
 
 You are not currently authenticated with Discogs. To access your personal music collection, you need to authenticate first.
 
@@ -127,9 +108,8 @@ You are not currently authenticated with Discogs. To access your personal music 
 - get_collection_stats: View collection statistics
 - get_recommendations: Get personalized recommendations
 - get_cache_stats: View cache performance`,
-					},
-				],
-			};
+				},
+			],
 		}
-	);
+	})
 }

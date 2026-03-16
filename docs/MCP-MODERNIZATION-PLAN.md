@@ -1,12 +1,9 @@
 # Discogs MCP Server Modernization Plan
 
-> **📍 CURRENT STATUS (2025-12-15)**
-> **Sessions Complete:** All sessions complete ✅
-> **Status:** Migration complete! **v2.0.0 Released**
-> **Branch:** `main` (merged from `feature/agents-sdk-migration`)
+> **📍 CURRENT STATUS (2025-12-15)** > **Sessions Complete:** All sessions complete ✅
+> **Status:** Migration complete! **v2.0.0 Released** > **Branch:** `main` (merged from `feature/agents-sdk-migration`)
 > **Progress:** 8/8 sessions complete (100%)
-> **Production URL:** https://discogs-mcp-prod.rian-db8.workers.dev
-> **✅ COMPLETE:** Full OAuth flow tested and working with Claude Desktop
+> **Production URL:** https://discogs-mcp.com > **✅ COMPLETE:** Full OAuth flow tested and working with Claude Desktop
 
 ## Executive Summary
 
@@ -22,24 +19,24 @@ The Discogs MCP server currently uses a **custom hand-rolled MCP implementation*
 
 ### What We Have
 
-| File | Purpose | Keep/Migrate/Remove |
-|------|---------|---------------------|
-| `src/index.ts` | Main worker entry, routing | **Migrate** - simplify to use SDK |
-| `src/protocol/handlers.ts` | MCP method handlers (1773 lines) | **Migrate** - convert to SDK tools/resources |
-| `src/protocol/parser.ts` | JSON-RPC parsing | **Remove** - SDK handles this |
-| `src/protocol/validation.ts` | Request validation | **Remove** - SDK + Zod handles this |
-| `src/types/mcp.ts` | MCP type definitions | **Remove** - SDK provides types |
-| `src/types/jsonrpc.ts` | JSON-RPC 2.0 types | **Remove** - SDK provides types |
-| `src/transport/sse.ts` | Legacy SSE transport | **Remove** - deprecated |
-| `src/auth/discogs.ts` | Discogs OAuth 1.0a | **Keep** - still needed |
-| `src/auth/jwt.ts` | JWT session management | **Keep** - still needed |
-| `src/clients/discogs.ts` | Discogs API client | **Keep** - still needed |
-| `src/clients/cachedDiscogs.ts` | Cached API client | **Keep** - still needed |
-| `src/utils/moodMapping.ts` | Mood-to-genre mapping | **Keep** - unique business logic! |
-| `src/utils/cache.ts` | Cache utilities | **Keep** - still needed |
-| `src/utils/rateLimit.ts` | Rate limiting | **Keep** - still needed |
-| `src/utils/retry.ts` | Retry logic | **Keep** - still needed |
-| `src/utils/kvLogger.ts` | KV logging | **Keep** - still needed |
+| File                           | Purpose                          | Keep/Migrate/Remove                          |
+| ------------------------------ | -------------------------------- | -------------------------------------------- |
+| `src/index.ts`                 | Main worker entry, routing       | **Migrate** - simplify to use SDK            |
+| `src/protocol/handlers.ts`     | MCP method handlers (1773 lines) | **Migrate** - convert to SDK tools/resources |
+| `src/protocol/parser.ts`       | JSON-RPC parsing                 | **Remove** - SDK handles this                |
+| `src/protocol/validation.ts`   | Request validation               | **Remove** - SDK + Zod handles this          |
+| `src/types/mcp.ts`             | MCP type definitions             | **Remove** - SDK provides types              |
+| `src/types/jsonrpc.ts`         | JSON-RPC 2.0 types               | **Remove** - SDK provides types              |
+| `src/transport/sse.ts`         | Legacy SSE transport             | **Remove** - deprecated                      |
+| `src/auth/discogs.ts`          | Discogs OAuth 1.0a               | **Keep** - still needed                      |
+| `src/auth/jwt.ts`              | JWT session management           | **Keep** - still needed                      |
+| `src/clients/discogs.ts`       | Discogs API client               | **Keep** - still needed                      |
+| `src/clients/cachedDiscogs.ts` | Cached API client                | **Keep** - still needed                      |
+| `src/utils/moodMapping.ts`     | Mood-to-genre mapping            | **Keep** - unique business logic!            |
+| `src/utils/cache.ts`           | Cache utilities                  | **Keep** - still needed                      |
+| `src/utils/rateLimit.ts`       | Rate limiting                    | **Keep** - still needed                      |
+| `src/utils/retry.ts`           | Retry logic                      | **Keep** - still needed                      |
+| `src/utils/kvLogger.ts`        | KV logging                       | **Keep** - still needed                      |
 
 ### What's Working (Keep These)
 
@@ -98,24 +95,24 @@ src/
 
 ### Endpoint Structure
 
-| Endpoint | Method | Purpose | Notes |
-|----------|--------|---------|-------|
-| `/` | GET | Server info JSON | Simple metadata |
-| `/` | POST | MCP JSON-RPC | **Keep for backward compat** |
-| `/mcp` | POST | MCP JSON-RPC | Primary endpoint going forward |
-| `/mcp` | GET | SSE stream (optional) | SDK handles this if needed |
-| `/login` | GET | Discogs OAuth redirect | |
-| `/callback` | GET | Discogs OAuth callback | |
-| `/mcp-auth` | GET | Auth status endpoint | |
-| `/health` | GET | Health check | |
+| Endpoint    | Method | Purpose                | Notes                          |
+| ----------- | ------ | ---------------------- | ------------------------------ |
+| `/`         | GET    | Server info JSON       | Simple metadata                |
+| `/`         | POST   | MCP JSON-RPC           | **Keep for backward compat**   |
+| `/mcp`      | POST   | MCP JSON-RPC           | Primary endpoint going forward |
+| `/mcp`      | GET    | SSE stream (optional)  | SDK handles this if needed     |
+| `/login`    | GET    | Discogs OAuth redirect |                                |
+| `/callback` | GET    | Discogs OAuth callback |                                |
+| `/mcp-auth` | GET    | Auth status endpoint   |                                |
+| `/health`   | GET    | Health check           |                                |
 
 ### Breaking Changes
 
-| Change | Impact | Mitigation |
-|--------|--------|------------|
+| Change                  | Impact                      | Mitigation                           |
+| ----------------------- | --------------------------- | ------------------------------------ |
 | `/sse` endpoint removed | Users with `/sse` in config | Low impact - most use root or `/mcp` |
-| `POST /` still works | None | Keeping for backward compat |
-| Protocol internals | None visible to users | SDK handles same JSON-RPC format |
+| `POST /` still works    | None                        | Keeping for backward compat          |
+| Protocol internals      | None visible to users       | SDK handles same JSON-RPC format     |
 
 ---
 
@@ -263,12 +260,14 @@ sessionId = `mcp-${hashHex.substring(0, 32)}`
 ```
 
 **Why this works:**
+
 - Same client (IP + User Agent) always gets the same session ID
 - Session ID changes weekly (matching 7-day auth expiry)
 - Works even when client doesn't persist headers between reconnections
 - Auth stored in KV is retrieved correctly after OAuth callback
 
 **Completed Tasks:**
+
 - [x] **8b.1** Full OAuth flow tested with Claude Desktop ✅
 - [x] **8b.2** Authenticated tools working with real Discogs data ✅
 - [x] **8b.3** Resources tested with authentication ✅
@@ -295,95 +294,97 @@ sessionId = `mcp-${hashHex.substring(0, 32)}`
 
 ```typescript
 // src/mcp/server.ts
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 export const server = new McpServer({
-  name: "discogs-mcp",
-  version: "1.0.0",
-});
+	name: 'discogs-mcp',
+	version: '1.0.0',
+})
 
 // Import and register tools, resources, prompts
-import { registerPublicTools } from "./tools/public.js";
-import { registerAuthenticatedTools } from "./tools/authenticated.js";
-import { registerResources } from "./resources/discogs.js";
-import { registerPrompts } from "./prompts/collection.js";
+import { registerPublicTools } from './tools/public.js'
+import { registerAuthenticatedTools } from './tools/authenticated.js'
+import { registerResources } from './resources/discogs.js'
+import { registerPrompts } from './prompts/collection.js'
 
-registerPublicTools(server);
-registerAuthenticatedTools(server);
-registerResources(server);
-registerPrompts(server);
+registerPublicTools(server)
+registerAuthenticatedTools(server)
+registerResources(server)
+registerPrompts(server)
 ```
 
 ### Tool Registration Example (with Mood Mapping)
 
 ```typescript
 // src/mcp/tools/authenticated.ts
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-import { expandMoodToGenres } from "../../utils/moodMapping.js";
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
+import { expandMoodToGenres } from '../../utils/moodMapping.js'
 
 export function registerAuthenticatedTools(server: McpServer, env: Env) {
-  server.tool(
-    "search_collection",
-    "Search your Discogs collection with mood-aware queries",
-    {
-      query: z.string().describe("Search query (supports mood descriptors like 'mellow jazz' or 'energetic')"),
-      limit: z.number().optional().default(20),
-    },
-    async ({ query, limit }, { sessionId }) => {
-      // Get authenticated client from session
-      const client = await getAuthenticatedClient(sessionId, env);
+	server.tool(
+		'search_collection',
+		'Search your Discogs collection with mood-aware queries',
+		{
+			query: z.string().describe("Search query (supports mood descriptors like 'mellow jazz' or 'energetic')"),
+			limit: z.number().optional().default(20),
+		},
+		async ({ query, limit }, { sessionId }) => {
+			// Get authenticated client from session
+			const client = await getAuthenticatedClient(sessionId, env)
 
-      // Apply mood mapping to enhance query
-      const moodMatch = expandMoodToGenres(query);
-      const enhancedQuery = moodMatch.confidence >= 0.3
-        ? { ...parseQuery(query), genres: moodMatch.genres }
-        : parseQuery(query);
+			// Apply mood mapping to enhance query
+			const moodMatch = expandMoodToGenres(query)
+			const enhancedQuery = moodMatch.confidence >= 0.3 ? { ...parseQuery(query), genres: moodMatch.genres } : parseQuery(query)
 
-      const results = await client.searchCollection(enhancedQuery, limit);
+			const results = await client.searchCollection(enhancedQuery, limit)
 
-      return {
-        content: [{
-          type: "text",
-          text: formatSearchResults(results),
-        }],
-      };
-    }
-  );
+			return {
+				content: [
+					{
+						type: 'text',
+						text: formatSearchResults(results),
+					},
+				],
+			}
+		},
+	)
 
-  server.tool(
-    "get_recommendations",
-    "Get personalized music recommendations with mood support",
-    {
-      mood: z.string().optional().describe("Mood descriptor (e.g., 'mellow', 'energetic', 'Sunday evening')"),
-      genre: z.string().optional(),
-      decade: z.string().optional(),
-      similar_to: z.string().optional().describe("Release ID to find similar music"),
-      limit: z.number().optional().default(10),
-    },
-    async ({ mood, genre, decade, similar_to, limit }, { sessionId }) => {
-      const client = await getAuthenticatedClient(sessionId, env);
+	server.tool(
+		'get_recommendations',
+		'Get personalized music recommendations with mood support',
+		{
+			mood: z.string().optional().describe("Mood descriptor (e.g., 'mellow', 'energetic', 'Sunday evening')"),
+			genre: z.string().optional(),
+			decade: z.string().optional(),
+			similar_to: z.string().optional().describe('Release ID to find similar music'),
+			limit: z.number().optional().default(10),
+		},
+		async ({ mood, genre, decade, similar_to, limit }, { sessionId }) => {
+			const client = await getAuthenticatedClient(sessionId, env)
 
-      // Enhance mood queries with genre expansion
-      let filters: any = { genre, decade, similar_to };
-      if (mood) {
-        const moodMatch = expandMoodToGenres(mood);
-        if (moodMatch.confidence >= 0.3) {
-          filters.moodGenres = moodMatch.genres;
-          filters.moodContext = moodMatch.context;
-        }
-      }
+			// Enhance mood queries with genre expansion
+			let filters: any = { genre, decade, similar_to }
+			if (mood) {
+				const moodMatch = expandMoodToGenres(mood)
+				if (moodMatch.confidence >= 0.3) {
+					filters.moodGenres = moodMatch.genres
+					filters.moodContext = moodMatch.context
+				}
+			}
 
-      const recommendations = await client.getRecommendations(filters, limit);
+			const recommendations = await client.getRecommendations(filters, limit)
 
-      return {
-        content: [{
-          type: "text",
-          text: formatRecommendations(recommendations),
-        }],
-      };
-    }
-  );
+			return {
+				content: [
+					{
+						type: 'text',
+						text: formatRecommendations(recommendations),
+					},
+				],
+			}
+		},
+	)
 }
 ```
 
@@ -391,56 +392,59 @@ export function registerAuthenticatedTools(server: McpServer, env: Env) {
 
 ```typescript
 // src/index.ts
-import { createMcpHandler } from "agents/mcp";
-import { server } from "./mcp/server.js";
-import type { Env } from "./types/env.js";
+import { createMcpHandler } from 'agents/mcp'
+import { server } from './mcp/server.js'
+import type { Env } from './types/env.js'
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		const url = new URL(request.url)
 
-    // MCP endpoint - primary (/mcp) and backward compat (POST /)
-    if (url.pathname === "/mcp" || (url.pathname === "/" && request.method === "POST")) {
-      return createMcpHandler(server)(request, env, ctx);
-    }
+		// MCP endpoint - primary (/mcp) and backward compat (POST /)
+		if (url.pathname === '/mcp' || (url.pathname === '/' && request.method === 'POST')) {
+			return createMcpHandler(server)(request, env, ctx)
+		}
 
-    // Server info (GET / only)
-    if (url.pathname === "/" && request.method === "GET") {
-      return new Response(JSON.stringify({
-        name: "discogs-mcp",
-        version: "1.0.0",
-        description: "Discogs MCP server with mood-aware music discovery",
-        endpoints: {
-          mcp: "/mcp",
-          login: "/login",
-          health: "/health"
-        }
-      }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+		// Server info (GET / only)
+		if (url.pathname === '/' && request.method === 'GET') {
+			return new Response(
+				JSON.stringify({
+					name: 'discogs-mcp',
+					version: '1.0.0',
+					description: 'Discogs MCP server with mood-aware music discovery',
+					endpoints: {
+						mcp: '/mcp',
+						login: '/login',
+						health: '/health',
+					},
+				}),
+				{
+					headers: { 'Content-Type': 'application/json' },
+				},
+			)
+		}
 
-    // Auth endpoints (keep existing)
-    if (url.pathname === "/login") {
-      return handleLogin(request, env);
-    }
-    if (url.pathname === "/callback") {
-      return handleCallback(request, env);
-    }
-    if (url.pathname === "/mcp-auth") {
-      return handleMCPAuth(request, env);
-    }
+		// Auth endpoints (keep existing)
+		if (url.pathname === '/login') {
+			return handleLogin(request, env)
+		}
+		if (url.pathname === '/callback') {
+			return handleCallback(request, env)
+		}
+		if (url.pathname === '/mcp-auth') {
+			return handleMCPAuth(request, env)
+		}
 
-    // Health check
-    if (url.pathname === "/health") {
-      return new Response(JSON.stringify({ status: "ok" }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+		// Health check
+		if (url.pathname === '/health') {
+			return new Response(JSON.stringify({ status: 'ok' }), {
+				headers: { 'Content-Type': 'application/json' },
+			})
+		}
 
-    return new Response("Not found", { status: 404 });
-  },
-};
+		return new Response('Not found', { status: 404 })
+	},
+}
 ```
 
 ---
@@ -456,19 +460,19 @@ The SDK's `server.tool()` doesn't directly receive `env`. Solutions:
 ```typescript
 // src/mcp/server.ts
 export function createServer(env: Env) {
-  const server = new McpServer({ name: "discogs-mcp", version: "1.0.0" });
+	const server = new McpServer({ name: 'discogs-mcp', version: '1.0.0' })
 
-  // Create clients with env access via closure
-  const discogsClient = new DiscogsClient(env.DISCOGS_CONSUMER_KEY, env.DISCOGS_CONSUMER_SECRET);
-  const cachedClient = new CachedDiscogsClient(discogsClient, env.MCP_SESSIONS);
+	// Create clients with env access via closure
+	const discogsClient = new DiscogsClient(env.DISCOGS_CONSUMER_KEY, env.DISCOGS_CONSUMER_SECRET)
+	const cachedClient = new CachedDiscogsClient(discogsClient, env.MCP_SESSIONS)
 
-  // Register tools with access to clients via closure
-  registerPublicTools(server);
-  registerAuthenticatedTools(server, env, cachedClient);
-  registerResources(server, env);
-  registerPrompts(server, env);
+	// Register tools with access to clients via closure
+	registerPublicTools(server)
+	registerAuthenticatedTools(server, env, cachedClient)
+	registerResources(server, env)
+	registerPrompts(server, env)
 
-  return server;
+	return server
 }
 ```
 
@@ -477,12 +481,14 @@ export function createServer(env: Env) {
 Discogs uses OAuth 1.0a (not 2.0), which requires HMAC-SHA1 signatures.
 
 **Current implementation to preserve:**
+
 - `src/auth/discogs.ts` - OAuth 1.0a with Web Crypto API
 - Three-step flow: Request Token → User Authorization → Access Token
 - HMAC-SHA1 signature generation
 - Request throttling (200ms delay)
 
 **Integration with SDK:**
+
 - Keep OAuth flow in separate endpoints (`/login`, `/callback`)
 - Store access tokens in sessions (KV storage)
 - Pass session ID via cookie or query parameter
@@ -493,6 +499,7 @@ Discogs uses OAuth 1.0a (not 2.0), which requires HMAC-SHA1 signatures.
 The mood mapping system (`src/utils/moodMapping.ts`) is unique business logic that must be preserved.
 
 **Key features to maintain:**
+
 - Emotional descriptor → genre/style mapping
 - Contextual mappings (time, activity, season)
 - Compound mood detection
@@ -500,25 +507,28 @@ The mood mapping system (`src/utils/moodMapping.ts`) is unique business logic th
 - Concrete genre filtering
 
 **Integration approach:**
+
 ```typescript
 // Import mood mapping in tool handlers
-import { expandMoodToGenres } from "../../utils/moodMapping.js";
+import { expandMoodToGenres } from '../../utils/moodMapping.js'
 
 // Apply in search_collection and get_recommendations tools
-const moodMatch = expandMoodToGenres(query);
+const moodMatch = expandMoodToGenres(query)
 if (moodMatch.confidence >= 0.3) {
-  // Enhance query with mood-derived genres
+	// Enhance query with mood-derived genres
 }
 ```
 
 ### Challenge 4: Session Management
 
 **Current multi-strategy approach:**
+
 - Cookie-based sessions (HTTP-only, Secure, SameSite=Lax)
 - Connection-specific sessions for SSE compatibility
 - Deterministic connection IDs for mcp-remote
 
 **Migration strategy:**
+
 - Simplify to cookie-based sessions only (SSE deprecated)
 - Use SDK's session handling if available
 - Fall back to manual session lookup via `Mcp-Session-Id` header
@@ -530,12 +540,14 @@ if (moodMatch.confidence >= 0.3) {
 ### OAuth 1.0a vs OAuth 2.0
 
 Unlike Last.fm MCP (which uses OAuth 2.0), Discogs requires OAuth 1.0a:
+
 - More complex signature requirements (HMAC-SHA1)
 - Three-legged authentication flow
 - Token + Token Secret pairs
 - No refresh tokens (tokens don't expire)
 
 **Preservation strategy:**
+
 - Keep `src/auth/discogs.ts` implementation
 - Keep `crypto-js` and `oauth-1.0a` dependencies
 - Maintain current OAuth endpoints (`/login`, `/callback`)
@@ -543,11 +555,13 @@ Unlike Last.fm MCP (which uses OAuth 2.0), Discogs requires OAuth 1.0a:
 ### Mood Mapping Intelligence
 
 The mood mapping system is a key differentiator:
+
 - Maps queries like "mellow Sunday evening jazz" to concrete genres
 - Handles temporal contexts ("rainy day", "dinner music")
 - Provides confidence scores to avoid false positives
 
 **Testing priorities:**
+
 1. Verify mood detection accuracy
 2. Test contextual mappings
 3. Ensure confidence thresholds work correctly
@@ -556,6 +570,7 @@ The mood mapping system is a key differentiator:
 ### Advanced Search Logic
 
 The search implementation has sophisticated features:
+
 - OR logic for genre queries
 - AND logic for specific term searches
 - Relevance scoring with term match percentage
@@ -563,6 +578,7 @@ The search implementation has sophisticated features:
 - Decade expansion ("1960s" → 1960-1969)
 
 **Preservation checklist:**
+
 - Multi-word query handling
 - Relevance scoring algorithm
 - Temporal term detection
@@ -574,22 +590,23 @@ The search implementation has sophisticated features:
 
 Use this section to track progress across sessions:
 
-| Session | Status | Date | Notes |
-|---------|--------|------|-------|
-| 1. Setup & Dependencies | ✅ Complete | 2025-12-14 | Installed SDK, created directory structure, added nodejs_compat flag |
-| 2. Public Tools | ✅ Complete | 2025-12-14 | Migrated 3 public tools, integrated createMcpHandler, all tools tested |
-| 3. Authenticated Tools | ✅ Complete | 2025-12-14 | Migrated 5 tools with session management via closure pattern, mood mapping preserved |
-| 4. Resources & Prompts | ✅ Complete | 2025-12-14 | Migrated 3 resources and 3 prompts, all registered and tested |
-| 5. Entry Point & Routing | ✅ Complete | 2025-12-14 | MCP routing complete, auth endpoints preserved, session extraction integrated |
-| 6. Authentication | ✅ Complete | 2025-12-15 | Deterministic session ID solution implemented |
-| 7. Testing | ✅ Complete | 2025-12-14 | Local dev server testing, all tools/resources/prompts verified working |
-| 8. Cleanup & Deploy | ✅ Complete | 2025-12-15 | Old files removed, deployed to production, v2.0.0 released |
+| Session                  | Status      | Date       | Notes                                                                                |
+| ------------------------ | ----------- | ---------- | ------------------------------------------------------------------------------------ |
+| 1. Setup & Dependencies  | ✅ Complete | 2025-12-14 | Installed SDK, created directory structure, added nodejs_compat flag                 |
+| 2. Public Tools          | ✅ Complete | 2025-12-14 | Migrated 3 public tools, integrated createMcpHandler, all tools tested               |
+| 3. Authenticated Tools   | ✅ Complete | 2025-12-14 | Migrated 5 tools with session management via closure pattern, mood mapping preserved |
+| 4. Resources & Prompts   | ✅ Complete | 2025-12-14 | Migrated 3 resources and 3 prompts, all registered and tested                        |
+| 5. Entry Point & Routing | ✅ Complete | 2025-12-14 | MCP routing complete, auth endpoints preserved, session extraction integrated        |
+| 6. Authentication        | ✅ Complete | 2025-12-15 | Deterministic session ID solution implemented                                        |
+| 7. Testing               | ✅ Complete | 2025-12-14 | Local dev server testing, all tools/resources/prompts verified working               |
+| 8. Cleanup & Deploy      | ✅ Complete | 2025-12-15 | Old files removed, deployed to production, v2.0.0 released                           |
 
 **🎉 Migration Complete!** All 8 sessions finished. v2.0.0 released on 2025-12-15.
 
 ### Key Findings & Notes
 
 **Session 1 & 2 Learnings:**
+
 - ✅ SDK requires `nodejs_compat` compatibility flag in wrangler.toml
 - ✅ Bundle size increased from 147 KiB → 2597 KiB (expected with full SDK)
 - ⚠️ SDK tool handlers don't receive Request object in `extra` parameter
@@ -599,6 +616,7 @@ Use this section to track progress across sessions:
 - ✅ Backward compatibility maintained (POST / still works)
 
 **Session 3 Learnings:**
+
 - ✅ **Session Management Solution:** Factory pattern with closures works perfectly
   - `createServer(env, request)` - Server created per request with request context
   - `extractSessionFromRequest()` - Async session extraction from cookies/KV
@@ -618,6 +636,7 @@ Use this section to track progress across sessions:
 - ⚠️ Note: get_recent_activity tool was not in original implementation (skipped)
 
 **Session 4 Learnings:**
+
 - ✅ **Resources Implementation:** All 3 Discogs resources working
   - `discogs://collection` - Returns user's full collection (first 100 items)
   - `discogs://release/{id}` - Template URI for specific releases
@@ -631,6 +650,7 @@ Use this section to track progress across sessions:
 - ✅ **SDK Pattern:** Resources and prompts use the same closure pattern as tools
 
 **Session 7 Learnings:**
+
 - ✅ **Local Development Testing:** `wrangler dev` works perfectly on localhost:8787
 - ✅ **MCP Protocol Verified:** Initialize handshake successful, capabilities exposed correctly
 - ✅ **All Components Registered:**
@@ -643,6 +663,7 @@ Use this section to track progress across sessions:
 - ✅ **Build Clean:** No errors, warnings, or type issues
 
 **Session 8a Learnings:**
+
 - ✅ **Cleanup Completed:** Removed 2,947 lines of old protocol code (6 files)
   - `src/protocol/handlers.ts` (1,773 lines)
   - `src/protocol/parser.ts`, `validation.ts`
@@ -652,7 +673,7 @@ Use this section to track progress across sessions:
 - ✅ **Production Deployment:** Successfully deployed to production
   - Bundle size: 2643 KiB (down 1 KiB after cleanup)
   - Startup time: 68-71ms
-  - URL: https://discogs-mcp-prod.rian-db8.workers.dev
+  - URL: https://discogs-mcp.com
 - ✅ **MCP Protocol Testing:** All components verified in production
   - tools/list: 8 tools registered correctly
   - resources/list: 3 resources registered correctly
@@ -668,6 +689,7 @@ Use this section to track progress across sessions:
 - ✅ **Authenticated Tools:** All tools verified working with real Discogs data
 
 **Session 8b Learnings (2025-12-15):**
+
 - ✅ **Deterministic Session ID:** Key solution for mcp-remote compatibility
   - Problem: mcp-remote doesn't persist `Mcp-Session-Id` headers between reconnections
   - Solution: Generate deterministic session ID from `clientIP + userAgent + weekTimestamp`
@@ -682,35 +704,39 @@ Use this section to track progress across sessions:
 ## Testing Strategy
 
 ### Unit Tests
+
 - All tools with mocked Discogs API
 - Mood mapping function tests
 - Search logic validation
 - Recommendation algorithm tests
 
 ### Integration Tests
+
 - Full OAuth 1.0a flow
 - Session persistence
 - Rate limiting under load
 - Cache hit/miss ratios
 
 ### Mood Mapping Tests (Critical!)
+
 ```typescript
 describe('Mood Mapping', () => {
-  test('detects mellow mood', () => {
-    const result = expandMoodToGenres('mellow jazz');
-    expect(result.confidence).toBeGreaterThanOrEqual(0.3);
-    expect(result.genres).toContain('Jazz');
-  });
+	test('detects mellow mood', () => {
+		const result = expandMoodToGenres('mellow jazz')
+		expect(result.confidence).toBeGreaterThanOrEqual(0.3)
+		expect(result.genres).toContain('Jazz')
+	})
 
-  test('handles contextual moods', () => {
-    const result = expandMoodToGenres('Sunday evening vibes');
-    expect(result.context).toBe('time');
-    expect(result.genres.length).toBeGreaterThan(0);
-  });
-});
+	test('handles contextual moods', () => {
+		const result = expandMoodToGenres('Sunday evening vibes')
+		expect(result.context).toBe('time')
+		expect(result.genres.length).toBeGreaterThan(0)
+	})
+})
 ```
 
 ### Client Compatibility
+
 - MCP Inspector
 - Claude Code
 - Claude Desktop
@@ -739,12 +765,12 @@ claude mcp add --transport http discogs https://discogs-mcp-prod.WORKER_NAME.wor
 
 ```json
 {
-  "mcpServers": {
-    "discogs": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "https://discogs-mcp-prod.WORKER_NAME.workers.dev/mcp"]
-    }
-  }
+	"mcpServers": {
+		"discogs": {
+			"command": "npx",
+			"args": ["-y", "mcp-remote", "https://discogs-mcp-prod.WORKER_NAME.workers.dev/mcp"]
+		}
+	}
 }
 ```
 
@@ -769,6 +795,7 @@ npx @modelcontextprotocol/inspector https://discogs-mcp-prod.WORKER_NAME.workers
 ## Success Criteria
 
 Migration is complete when:
+
 1. ✅ All 9 tools working with SDK
 2. ✅ All 3 resources working with SDK
 3. ✅ All 3 prompts working with SDK

@@ -4,8 +4,8 @@
  * Now using Cloudflare Agents SDK + @modelcontextprotocol/sdk
  */
 
-import { createMcpHandler } from "agents/mcp";
-import { createMcpServer } from "./mcp/server.js";
+import { createMcpHandler } from 'agents/mcp'
+import { createMcpServer } from './mcp/server.js'
 import { DiscogsAuth } from './auth/discogs'
 import { createSessionToken, verifySessionToken, type SessionPayload } from './auth/jwt'
 import type { Env } from './types/env'
@@ -16,19 +16,18 @@ interface LegacySessionContext {
 	connectionId?: string
 }
 
-async function extractSessionFromRequest(
-	request: Request,
-	env: Env,
-	sessionId: string,
-): Promise<LegacySessionContext> {
+async function extractSessionFromRequest(request: Request, env: Env, sessionId: string): Promise<LegacySessionContext> {
 	try {
 		const cookieHeader = request.headers.get('Cookie')
 		if (cookieHeader) {
-			const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
-				const [key, value] = cookie.trim().split('=')
-				if (key && value) acc[key] = value
-				return acc
-			}, {} as Record<string, string>)
+			const cookies = cookieHeader.split(';').reduce(
+				(acc, cookie) => {
+					const [key, value] = cookie.trim().split('=')
+					if (key && value) acc[key] = value
+					return acc
+				},
+				{} as Record<string, string>,
+			)
 			const sessionToken = cookies.session
 			if (sessionToken) {
 				const session = await verifySessionToken(sessionToken, env.JWT_SECRET)
@@ -180,7 +179,7 @@ export default {
 				// Main endpoint - POST routes to MCP, GET shows info
 				if (request.method === 'POST') {
 					// Backward compatibility: POST / routes to MCP handler
-					return handleMCPRequest(request, env, ctx);
+					return handleMCPRequest(request, env, ctx)
 				} else if (request.method === 'GET') {
 					return new Response(
 						JSON.stringify({
@@ -211,7 +210,7 @@ export default {
 			case '/mcp':
 				// Primary MCP endpoint
 				if (request.method === 'POST' || request.method === 'GET') {
-					return handleMCPRequest(request, env, ctx);
+					return handleMCPRequest(request, env, ctx)
 				} else {
 					return new Response('Method not allowed. Use POST or GET for MCP requests.', { status: 405 })
 				}
@@ -297,12 +296,16 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 		})
 
 		// Store token secret temporarily with connection ID
-		await env.MCP_SESSIONS.put(`oauth-token:${oauth_token}`, JSON.stringify({
-			tokenSecret: oauth_token_secret,
-			connectionId: connectionId || 'unknown'
-		}), {
-			expirationTtl: 600, // 10 minutes - OAuth flow should complete within this time
-		})
+		await env.MCP_SESSIONS.put(
+			`oauth-token:${oauth_token}`,
+			JSON.stringify({
+				tokenSecret: oauth_token_secret,
+				connectionId: connectionId || 'unknown',
+			}),
+			{
+				expirationTtl: 600, // 10 minutes - OAuth flow should complete within this time
+			},
+		)
 
 		// Redirect to Discogs authorization page
 		const authorizeUrl = auth.getAuthorizeUrl(oauth_token)
@@ -405,9 +408,10 @@ async function handleCallback(request: Request, env: Env): Promise<Response> {
 			'Max-Age=604800', // 7 days in seconds
 		].join('; ')
 
-		const responseMessage = finalConnectionId !== 'unknown'
-			? `Authentication successful! Your MCP connection is now authenticated and ready to use.`
-			: `Authentication successful! You can now use the MCP server to access your Discogs collection.`
+		const responseMessage =
+			finalConnectionId !== 'unknown'
+				? `Authentication successful! Your MCP connection is now authenticated and ready to use.`
+				: `Authentication successful! You can now use the MCP server to access your Discogs collection.`
 
 		return new Response(responseMessage, {
 			status: 200,
@@ -421,7 +425,6 @@ async function handleCallback(request: Request, env: Env): Promise<Response> {
 		return new Response('OAuth callback failed', { status: 500 })
 	}
 }
-
 
 /**
  * Handle MCP authentication endpoint - returns latest session token
@@ -485,7 +488,7 @@ async function handleMCPAuth(request: Request, env: Env): Promise<Response> {
 			console.error('Session verification error:', error)
 		}
 
-		const baseUrl = 'https://discogs-mcp-prod.rian-db8.workers.dev'
+		const baseUrl = 'https://discogs-mcp.com'
 
 		// Check for connection ID to provide connection-specific login URL
 		const connectionId = request.headers.get('X-Connection-ID')
