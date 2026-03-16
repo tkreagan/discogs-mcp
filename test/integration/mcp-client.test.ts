@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import worker from '../../src/index'
+import worker from '../../src/index-oauth'
 import type { Env } from '../../src/types/env'
-import { createSessionToken } from '../../src/auth/jwt'
 
 // Mock KV namespaces
 const mockMCP_LOGS = {
@@ -25,7 +24,6 @@ const mockMCP_SESSIONS = {
 const mockEnv: Env = {
 	DISCOGS_CONSUMER_KEY: 'test-key',
 	DISCOGS_CONSUMER_SECRET: 'test-secret',
-	JWT_SECRET: 'test-jwt-secret-for-integration-tests',
 	MCP_LOGS: mockMCP_LOGS as any,
 	MCP_RL: mockMCP_RL as any,
 	MCP_SESSIONS: mockMCP_SESSIONS as any,
@@ -122,7 +120,7 @@ function parseSSE(text: string): any | null {
  * Mock MCP Client - simulates Claude Desktop or other MCP clients
  */
 class MockMCPClient {
-	public sessionCookie: string | null = null
+	public sessionId: string | null = null
 	private requestId = 1
 
 	private getNextId(): number {
@@ -130,12 +128,14 @@ class MockMCPClient {
 	}
 
 	private async makeRequest(body: any): Promise<any> {
-		const request = new Request('http://localhost:8787/mcp', {
+		const url = this.sessionId
+			? `http://localhost:8787/mcp?session_id=${this.sessionId}`
+			: 'http://localhost:8787/mcp'
+		const request = new Request(url, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
 				'Accept': 'application/json, text/event-stream',
-				...(this.sessionCookie ? { Cookie: this.sessionCookie } : {}),
 			},
 			body: JSON.stringify(body),
 		})
@@ -198,17 +198,19 @@ class MockMCPClient {
 	}
 
 	async authenticate(): Promise<void> {
-		const sessionPayload = {
+		// In OAuth flow, sessions are stored in KV keyed as `session:<id>`
+		const sessionId = 'test-session-123'
+		const sessionData = JSON.stringify({
 			userId: 'test-user-123',
 			username: 'testuser',
 			accessToken: 'test-access-token',
 			accessTokenSecret: 'test-access-secret',
 			iat: Math.floor(Date.now() / 1000),
 			exp: Math.floor(Date.now() / 1000) + 3600,
-		}
+		})
 
-		const sessionToken = await createSessionToken(sessionPayload, mockEnv.JWT_SECRET)
-		this.sessionCookie = `session=${sessionToken}`
+		mockMCP_SESSIONS.get.mockResolvedValue(sessionData)
+		this.sessionId = sessionId
 	}
 
 	async listResources(): Promise<any> {
@@ -315,6 +317,10 @@ describe('MCP Client Integration Tests', () => {
 
 	describe('Full MCP Protocol Flow', () => {
 		it('should complete full initialization handshake', async () => {
+			// Session path is required — OAuth provider intercepts requests without a bearer token.
+			// Authenticate first so requests are routed through the KV session path.
+			await client.authenticate()
+
 			const initResult = await client.initialize()
 
 			expect(initResult).toMatchObject({
@@ -339,16 +345,12 @@ describe('MCP Client Integration Tests', () => {
 		})
 
 		it('should handle unauthenticated access to protected resources', async () => {
-			await client.initialize()
-			await client.sendInitialized()
-
+			// Without a session_id param and without a bearer token, the OAuth provider
+			// returns 401 invalid_token. Verify that behavior.
 			const result = await client.readResource('discogs://collection')
 
 			expect(result).toMatchObject({
-				jsonrpc: '2.0',
-				error: {
-					code: -32603,
-				},
+				error: 'invalid_token',
 			})
 		})
 

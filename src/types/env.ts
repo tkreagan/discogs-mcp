@@ -1,16 +1,21 @@
 /**
  * Environment variables and bindings for the Cloudflare Worker
  */
+import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider'
+
 export interface Env {
-	// Discogs OAuth credentials
-	DISCOGS_CONSUMER_KEY: string
-	DISCOGS_CONSUMER_SECRET: string
+  // Discogs OAuth credentials
+  DISCOGS_CONSUMER_KEY: string
+  DISCOGS_CONSUMER_SECRET: string
 
-	// JWT secret for signing session cookies
-	JWT_SECRET: string
+  // OAuth provider helpers (injected by @cloudflare/workers-oauth-provider at runtime)
+  OAUTH_PROVIDER: OAuthHelpers
 
-	// KV namespaces for logging, rate limiting, and sessions
-	MCP_LOGS: KVNamespace
-	MCP_RL: KVNamespace
-	MCP_SESSIONS: KVNamespace
+  // KV namespaces for logging, rate limiting, and sessions
+  MCP_LOGS: KVNamespace
+  MCP_RL: KVNamespace
+  MCP_SESSIONS: KVNamespace
+
+  // KV namespace for OAuth provider state (tokens, grants, client registrations)
+  OAUTH_KV: KVNamespace
 }

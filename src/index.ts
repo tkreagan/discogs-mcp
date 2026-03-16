@@ -5,11 +5,64 @@
  */
 
 import { createMcpHandler } from "agents/mcp";
-import { createServer } from "./mcp/server.js";
+import { createMcpServer } from "./mcp/server.js";
 import { DiscogsAuth } from './auth/discogs'
-import { createSessionToken, verifySessionToken } from './auth/jwt'
+import { createSessionToken, verifySessionToken, type SessionPayload } from './auth/jwt'
 import type { Env } from './types/env'
 import type { ExecutionContext } from '@cloudflare/workers-types'
+
+interface LegacySessionContext {
+	session: SessionPayload | null
+	connectionId?: string
+}
+
+async function extractSessionFromRequest(
+	request: Request,
+	env: Env,
+	sessionId: string,
+): Promise<LegacySessionContext> {
+	try {
+		const cookieHeader = request.headers.get('Cookie')
+		if (cookieHeader) {
+			const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+				const [key, value] = cookie.trim().split('=')
+				if (key && value) acc[key] = value
+				return acc
+			}, {} as Record<string, string>)
+			const sessionToken = cookies.session
+			if (sessionToken) {
+				const session = await verifySessionToken(sessionToken, env.JWT_SECRET)
+				if (session) return { session, connectionId: sessionId }
+			}
+		}
+	} catch (error) {
+		console.error('Error verifying cookie session:', error)
+	}
+
+	if (sessionId && env.MCP_SESSIONS) {
+		try {
+			const sessionDataStr = await env.MCP_SESSIONS.get(`session:${sessionId}`)
+			if (sessionDataStr) {
+				const sessionData = JSON.parse(sessionDataStr)
+				if (!sessionData.expiresAt || new Date(sessionData.expiresAt) <= new Date()) {
+					return { session: null, connectionId: sessionId }
+				}
+				const session: SessionPayload = {
+					userId: sessionData.userId,
+					accessToken: sessionData.accessToken,
+					accessTokenSecret: sessionData.accessTokenSecret,
+					iat: Math.floor(Date.now() / 1000),
+					exp: Math.floor(new Date(sessionData.expiresAt).getTime() / 1000),
+				}
+				return { session, connectionId: sessionId }
+			}
+		} catch (error) {
+			console.error('Error retrieving connection session:', error)
+		}
+	}
+
+	return { session: null, connectionId: sessionId }
+}
 
 // These types are available globally in Workers runtime
 /// <reference lib="dom" />
@@ -70,7 +123,21 @@ async function handleMCPRequest(request: Request, env: Env, ctx: ExecutionContex
 	console.log(`[MCP] Session ID: ${sessionId} (source: ${sessionSource})`)
 
 	// Create MCP server instance with session ID
-	const server = createServer(env, request, sessionId)
+	const baseUrl = `${url.protocol}//${url.host}`
+	const { server, setContext } = createMcpServer(env, baseUrl)
+
+	// Extract session from request and inject into server context
+	const sessionContext = await extractSessionFromRequest(request, env, sessionId)
+	if (sessionContext.session) {
+		const { userId, accessToken, accessTokenSecret } = sessionContext.session
+		setContext({
+			session: { username: userId, numericId: userId, accessToken, accessTokenSecret },
+			sessionId,
+		})
+	} else {
+		setContext({ session: null, sessionId })
+	}
+
 	const handler = createMcpHandler(server)
 
 	// Call the handler
