@@ -157,6 +157,22 @@ describe('DiscogsAuth', () => {
 		})
 	})
 
+	describe('security', () => {
+		it('should not log the signing key or signature', async () => {
+			const consoleSpy = vi.spyOn(console, 'log')
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: 'OK',
+				text: () => Promise.resolve('oauth_token=tok&oauth_token_secret=sec'),
+			})
+			await auth.getRequestToken('http://localhost/callback')
+			const loggedMessages = consoleSpy.mock.calls.map((args) => args.join(' '))
+			expect(loggedMessages.some((msg) => msg.includes('signing key'))).toBe(false)
+			expect(loggedMessages.some((msg) => msg.includes('OAuth signature:'))).toBe(false)
+		})
+	})
+
 	describe('OAuth signature generation', () => {
 		it('should generate consistent signatures for the same parameters', async () => {
 			// Mock Date.now to return consistent timestamp

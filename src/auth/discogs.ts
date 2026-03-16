@@ -149,10 +149,6 @@ export class DiscogsAuth {
 		const signature = await this.computeSignature(baseString, signingKey)
 		oauthParams.oauth_signature = signature
 
-		console.log('OAuth signature base string:', baseString)
-		console.log('OAuth signing key:', signingKey)
-		console.log('OAuth signature:', signature)
-
 		// Create authorization header
 		const authParams = Object.keys(oauthParams)
 			.map((key) => `${percentEncode(key)}="${percentEncode(oauthParams[key])}"`)
