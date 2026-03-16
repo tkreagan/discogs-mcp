@@ -75,5 +75,23 @@ async function handleManualCallback(request: Request, env: OAuthEnv): Promise<Re
 }
 
 function handleProtectedResourceMetadata(request: Request): Response {
-  return new Response('Not implemented', { status: 501 })
+  const url = new URL(request.url)
+  const baseUrl = `${url.protocol}//${url.host}`
+
+  return new Response(
+    JSON.stringify({
+      resource: baseUrl,
+      authorization_servers: [baseUrl],
+      bearer_methods_supported: ['header'],
+      scopes_supported: [],
+    }),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=3600',
+      },
+    },
+  )
 }
