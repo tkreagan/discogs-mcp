@@ -1,6 +1,6 @@
 # 🎵 Discogs MCP Server
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/rianvdm/discogs-mcp/releases/tag/v2.0.0)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/rianvdm/discogs-mcp/releases/tag/v2.3.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
@@ -73,12 +73,12 @@ npx @modelcontextprotocol/inspector https://discogs-mcp-prod.rian-db8.workers.de
 
 ## 🔐 Authentication
 
-This server uses **Discogs OAuth 1.0a** for authentication. When you first use a tool that requires access to your collection:
+This server uses **MCP OAuth 2.1** with Discogs as the identity provider. When you connect for the first time:
 
-1. The server generates a unique login URL
-2. Visit the URL and authorize the application on Discogs
-3. You'll be automatically redirected back
-4. Your session persists for 7 days with automatic cross-origin support
+1. Your MCP client automatically opens a browser window
+2. Authorize the application on Discogs
+3. You're redirected back and authenticated — no copy-pasting required
+4. Your session persists for 7 days
 
 ## 🛠️ Available Tools
 
@@ -132,7 +132,6 @@ discogs://search?q={query}       # Search results
    # Set your Discogs API credentials as Wrangler secrets
    wrangler secret put DISCOGS_CONSUMER_KEY
    wrangler secret put DISCOGS_CONSUMER_SECRET
-   wrangler secret put JWT_SECRET
    ```
 
 3. **Start development server**:
@@ -156,7 +155,6 @@ discogs://search?q={query}       # Search results
    ```bash
    wrangler secret put DISCOGS_CONSUMER_KEY --env production
    wrangler secret put DISCOGS_CONSUMER_SECRET --env production
-   wrangler secret put JWT_SECRET --env production
    ```
 
 3. **Deploy**:
