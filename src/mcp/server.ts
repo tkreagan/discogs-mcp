@@ -8,7 +8,18 @@ import { registerPublicTools } from './tools/public.js'
 import { registerAuthenticatedTools } from './tools/authenticated.js'
 import { registerResources } from './resources/discogs.js'
 import { registerPrompts } from './prompts/collection.js'
-import type { SessionPayload } from '../auth/jwt.js'
+
+/**
+ * Session payload compatible with tool expectations.
+ * Maps Discogs credentials to tool access patterns.
+ */
+export interface SessionPayload {
+  userId: string
+  accessToken: string
+  accessTokenSecret: string
+  iat: number
+  exp: number
+}
 
 /**
  * Auth session — Discogs credentials available to tools after authentication.
