@@ -15,4 +15,7 @@ export interface Env {
   MCP_LOGS: KVNamespace
   MCP_RL: KVNamespace
   MCP_SESSIONS: KVNamespace
+
+  // KV namespace for OAuth provider state (tokens, grants, client registrations)
+  OAUTH_KV: KVNamespace
 }
