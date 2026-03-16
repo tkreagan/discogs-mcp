@@ -146,9 +146,12 @@ discogs://search?q={query}       # Search results
 
 ## 🚀 Deployment
 
-1. **Create KV namespaces**:
+1. **Create KV namespaces** and add their IDs to `wrangler.toml` under `[env.production]`:
    ```bash
-   npm run setup:prod
+   wrangler kv namespace create MCP_SESSIONS --env production
+   wrangler kv namespace create MCP_LOGS --env production
+   wrangler kv namespace create MCP_RL --env production
+   wrangler kv namespace create OAUTH_KV --env production
    ```
 
 2. **Set production secrets**:
