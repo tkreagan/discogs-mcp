@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import worker from '../../src/index'
+import worker from '../../src/index-oauth'
 import type { Env } from '../../src/types/env'
-import { createSessionToken } from '../../src/auth/jwt'
 
 // Mock KV namespaces
 const mockMCP_LOGS = {
@@ -25,7 +24,6 @@ const mockMCP_SESSIONS = {
 const mockEnv: Env = {
 	DISCOGS_CONSUMER_KEY: 'test-key',
 	DISCOGS_CONSUMER_SECRET: 'test-secret',
-	JWT_SECRET: 'test-jwt-secret-for-integration-tests',
 	MCP_LOGS: mockMCP_LOGS as any,
 	MCP_RL: mockMCP_RL as any,
 	MCP_SESSIONS: mockMCP_SESSIONS as any,
@@ -198,17 +196,19 @@ class MockMCPClient {
 	}
 
 	async authenticate(): Promise<void> {
-		const sessionPayload = {
+		// In OAuth flow, sessions are stored in KV
+		const sessionId = 'test-session-123'
+		const sessionData = JSON.stringify({
 			userId: 'test-user-123',
 			username: 'testuser',
 			accessToken: 'test-access-token',
 			accessTokenSecret: 'test-access-secret',
 			iat: Math.floor(Date.now() / 1000),
 			exp: Math.floor(Date.now() / 1000) + 3600,
-		}
+		})
 
-		const sessionToken = await createSessionToken(sessionPayload, mockEnv.JWT_SECRET)
-		this.sessionCookie = `session=${sessionToken}`
+		mockMCP_SESSIONS.get.mockResolvedValue(sessionData)
+		this.sessionCookie = `session=${sessionId}`
 	}
 
 	async listResources(): Promise<any> {
