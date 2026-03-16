@@ -1,8 +1,0 @@
-{
-	"mcpServers": {
-		"discogs": {
-			"command": "npx",
-			"args": ["mcp-remote", "https://discogs-mcp-prod.rian-db8.workers.dev/sse"]
-		}
-	}
-}
