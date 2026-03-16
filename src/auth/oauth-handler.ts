@@ -90,7 +90,83 @@ async function handleAuthorize(request: Request, env: OAuthEnv): Promise<Respons
 }
 
 async function handleDiscogsCallback(request: Request, env: OAuthEnv): Promise<Response> {
-  return new Response('Not implemented', { status: 501 })
+  const url = new URL(request.url)
+  const oauthToken = url.searchParams.get('oauth_token')
+  const oauthVerifier = url.searchParams.get('oauth_verifier')
+
+  if (!oauthToken || !oauthVerifier) {
+    return new Response('Missing OAuth parameters', { status: 400 })
+  }
+
+  // Retrieve and immediately delete the pending state (prevents replay)
+  const pendingKey = `oauth-pending:${oauthToken}`
+  const pendingDataStr = await env.MCP_SESSIONS.get(pendingKey)
+
+  if (!pendingDataStr) {
+    return new Response(
+      '<html><body><h1>Session Expired</h1><p>The authorization session has expired or is invalid. Please try again.</p><p><a href="/authorize">Restart authorization</a></p></body></html>',
+      { status: 400, headers: { 'Content-Type': 'text/html' } },
+    )
+  }
+
+  const pendingData = JSON.parse(pendingDataStr)
+  const { oauthReqInfo, requestTokenSecret }: { oauthReqInfo: AuthRequest; requestTokenSecret: string } = pendingData
+
+  // Delete immediately — prevents replay even if subsequent steps fail
+  await env.MCP_SESSIONS.delete(pendingKey)
+
+  try {
+    // Exchange request token for access token
+    const discogsAuth = new DiscogsAuth(env.DISCOGS_CONSUMER_KEY, env.DISCOGS_CONSUMER_SECRET)
+    const { oauth_token: accessToken, oauth_token_secret: accessTokenSecret } =
+      await discogsAuth.getAccessToken(oauthToken, requestTokenSecret, oauthVerifier)
+
+    // Fetch Discogs identity to get username and numeric ID
+    const identityRes = await fetch('https://api.discogs.com/oauth/identity', {
+      headers: {
+        Authorization: (
+          await discogsAuth.getAuthHeaders('https://api.discogs.com/oauth/identity', 'GET', {
+            key: accessToken,
+            secret: accessTokenSecret,
+          })
+        ).Authorization,
+        'User-Agent': 'discogs-mcp/1.0.0',
+      },
+    })
+
+    if (!identityRes.ok) {
+      throw new Error(`Failed to fetch Discogs identity: ${identityRes.status}`)
+    }
+
+    const identity = await identityRes.json() as { id: number; username: string }
+    const userProps: DiscogsUserProps = {
+      numericId: String(identity.id),
+      username: identity.username,
+      accessToken,
+      accessTokenSecret,
+    }
+
+    // Complete the MCP OAuth 2.1 flow — library issues the authorization code to client
+    const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
+      request: oauthReqInfo,
+      userId: userProps.username, // OAuth 2.1 subject = username
+      metadata: {
+        label: 'Discogs MCP Access',
+        discogsUsername: userProps.username,
+        authorizedAt: new Date().toISOString(),
+      },
+      scope: oauthReqInfo.scope,
+      props: userProps,
+    })
+
+    return Response.redirect(redirectTo, 302)
+  } catch (error) {
+    console.error('[OAUTH] /discogs-callback error:', error)
+    return new Response(
+      `<html><body><h1>Authentication Failed</h1><p>${error instanceof Error ? error.message : 'Unknown error'}</p><p>Please try again.</p></body></html>`,
+      { status: 500, headers: { 'Content-Type': 'text/html' } },
+    )
+  }
 }
 
 async function handleManualLogin(request: Request, env: OAuthEnv): Promise<Response> {

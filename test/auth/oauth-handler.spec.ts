@@ -15,8 +15,12 @@ vi.mock('../../src/auth/discogs', () => ({
       oauth_token: 'mock-access-token',
       oauth_token_secret: 'mock-access-secret',
     }),
+    getAuthHeaders: vi.fn().mockResolvedValue({ Authorization: 'OAuth mock-header' }),
   })),
 }))
+
+const mockFetch = vi.fn()
+vi.stubGlobal('fetch', mockFetch)
 
 describe('/.well-known/oauth-protected-resource', () => {
   it('returns 200 with correct fields', async () => {
@@ -75,5 +79,66 @@ describe('/authorize', () => {
     const location = res.headers.get('Location') ?? ''
     expect(location).toContain('discogs.com/oauth/authorize')
     expect(location).toContain('oauth_token=mock-request-token')
+  })
+})
+
+describe('/discogs-callback', () => {
+  it('completes authorization and redirects to client redirect_uri', async () => {
+    // Pre-seed KV with a pending oauth state
+    await env.MCP_SESSIONS.put(
+      'oauth-pending:mock-request-token',
+      JSON.stringify({
+        oauthReqInfo: {
+          clientId: 'test-client',
+          redirectUri: 'https://client/callback',
+          state: 'random123',
+          scope: [],
+        },
+        requestTokenSecret: 'mock-request-secret',
+      }),
+    )
+
+    // Mock Discogs /oauth/identity response
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 12345, username: 'testuser' }),
+    })
+
+    const envWithOAuth = {
+      ...env,
+      OAUTH_PROVIDER: {
+        completeAuthorization: vi.fn().mockResolvedValue({
+          redirectTo: 'https://client/callback?code=test',
+        }),
+      },
+    }
+
+    const req = new Request(
+      'https://example.com/discogs-callback?oauth_token=mock-request-token&oauth_verifier=mock-verifier',
+    )
+    const ctx = createExecutionContext()
+    const res = await DiscogsOAuthHandler.fetch(req, envWithOAuth as any, ctx)
+    await waitOnExecutionContext(ctx)
+
+    // Should redirect (302) — library issues the code redirect to client
+    expect([302, 303]).toContain(res.status)
+  })
+
+  it('returns 400 when oauth_token is missing', async () => {
+    const req = new Request('https://example.com/discogs-callback')
+    const ctx = createExecutionContext()
+    const res = await DiscogsOAuthHandler.fetch(req, env as any, ctx)
+    await waitOnExecutionContext(ctx)
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 400 when KV entry is missing (expired)', async () => {
+    const req = new Request(
+      'https://example.com/discogs-callback?oauth_token=no-such-token&oauth_verifier=x',
+    )
+    const ctx = createExecutionContext()
+    const res = await DiscogsOAuthHandler.fetch(req, env as any, ctx)
+    await waitOnExecutionContext(ctx)
+    expect(res.status).toBe(400)
   })
 })
