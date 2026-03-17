@@ -8,6 +8,9 @@ export interface Env {
   DISCOGS_CONSUMER_KEY: string
   DISCOGS_CONSUMER_SECRET: string
 
+  // JWT secret for legacy session-based handler (src/index.ts)
+  JWT_SECRET: string
+
   // OAuth provider helpers (injected by @cloudflare/workers-oauth-provider at runtime)
   OAUTH_PROVIDER: OAuthHelpers
 

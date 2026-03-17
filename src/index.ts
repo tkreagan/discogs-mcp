@@ -8,6 +8,7 @@ import { createMcpHandler } from 'agents/mcp'
 import { createMcpServer } from './mcp/server.js'
 import { DiscogsAuth } from './auth/discogs'
 import { createSessionToken, verifySessionToken, type SessionPayload } from './auth/jwt'
+import { MARKETING_PAGE_HTML } from './marketing-page.js'
 import type { Env } from './types/env'
 import type { ExecutionContext } from '@cloudflare/workers-types'
 
@@ -181,28 +182,13 @@ export default {
 					// Backward compatibility: POST / routes to MCP handler
 					return handleMCPRequest(request, env, ctx)
 				} else if (request.method === 'GET') {
-					return new Response(
-						JSON.stringify({
-							name: 'Discogs MCP Server',
-							version: '1.0.0',
-							description: 'Model Context Protocol server for Discogs collection access (SDK-based)',
-							endpoints: {
-								'/': 'POST - MCP JSON-RPC endpoint (backward compat)',
-								'/mcp': 'POST - Primary MCP endpoint',
-								'/login': 'GET - OAuth login',
-								'/callback': 'GET - OAuth callback',
-								'/mcp-auth': 'GET - MCP authentication',
-								'/health': 'GET - Health check',
-							},
-						}),
-						{
-							status: 200,
-							headers: {
-								'Content-Type': 'application/json',
-								'Access-Control-Allow-Origin': '*',
-							},
+					return new Response(MARKETING_PAGE_HTML, {
+						status: 200,
+						headers: {
+							'Content-Type': 'text/html; charset=utf-8',
+							'Access-Control-Allow-Origin': '*',
 						},
-					)
+					})
 				} else {
 					return new Response('Method not allowed', { status: 405 })
 				}
