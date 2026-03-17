@@ -190,26 +190,7 @@ export const MARKETING_PAGE_HTML = `<!DOCTYPE html>
             width: 120px;
             height: 120px;
             border-radius: 50%;
-            background: conic-gradient(
-                #2a2a2a 0deg,   #1a1a1a 10deg,  #333 10deg,  #222 20deg,
-                #2a2a2a 20deg,  #1a1a1a 30deg,  #333 30deg,  #222 40deg,
-                #2a2a2a 40deg,  #1a1a1a 50deg,  #333 50deg,  #222 60deg,
-                #2a2a2a 60deg,  #1a1a1a 70deg,  #333 70deg,  #222 80deg,
-                #2a2a2a 80deg,  #1a1a1a 90deg,  #333 90deg,  #222 100deg,
-                #2a2a2a 100deg, #1a1a1a 110deg, #333 110deg, #222 120deg,
-                #2a2a2a 120deg, #1a1a1a 130deg, #333 130deg, #222 140deg,
-                #2a2a2a 140deg, #1a1a1a 150deg, #333 150deg, #222 160deg,
-                #2a2a2a 160deg, #1a1a1a 170deg, #333 170deg, #222 180deg,
-                #2a2a2a 180deg, #1a1a1a 190deg, #333 190deg, #222 200deg,
-                #2a2a2a 200deg, #1a1a1a 210deg, #333 210deg, #222 220deg,
-                #2a2a2a 220deg, #1a1a1a 230deg, #333 230deg, #222 240deg,
-                #2a2a2a 240deg, #1a1a1a 250deg, #333 250deg, #222 260deg,
-                #2a2a2a 260deg, #1a1a1a 270deg, #333 270deg, #222 280deg,
-                #2a2a2a 280deg, #1a1a1a 290deg, #333 290deg, #222 300deg,
-                #2a2a2a 300deg, #1a1a1a 310deg, #333 310deg, #222 320deg,
-                #2a2a2a 320deg, #1a1a1a 330deg, #333 330deg, #222 340deg,
-                #2a2a2a 340deg, #1a1a1a 350deg, #333 350deg, #222 360deg
-            );
+            background: repeating-conic-gradient(#2a2a2a 0deg 5deg, #1a1a1a 5deg 10deg, #333 10deg 15deg, #222 15deg 20deg);
             position: relative;
             animation: spin 6s linear infinite;
         }
