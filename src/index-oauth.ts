@@ -5,6 +5,7 @@ import type { ExecutionContext } from '@cloudflare/workers-types'
 import { createMcpHandler } from 'agents/mcp'
 
 import { DiscogsOAuthHandler, type DiscogsUserProps } from './auth/oauth-handler'
+import { MARKETING_PAGE_HTML } from './marketing-page.js'
 import { createMcpServer } from './mcp/server'
 import type { Env } from './types/env'
 
@@ -158,16 +159,10 @@ export default {
     }
 
     // Static routes — handled before OAuth provider
-    if (url.pathname === '/' && request.method === 'GET') {
-      return new Response(
-        JSON.stringify({
-          name: 'Discogs MCP Server',
-          version: SERVER_VERSION,
-          description: 'Model Context Protocol server for Discogs collection access',
-          endpoints: { '/mcp': 'MCP endpoint', '/login': 'Manual OAuth login', '/health': 'Health check' },
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
-      )
+    if (request.method === 'GET' && url.pathname === '/') {
+      return new Response(MARKETING_PAGE_HTML, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      })
     }
 
     if (url.pathname === '/health' && request.method === 'GET') {

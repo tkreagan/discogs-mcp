@@ -173,3 +173,39 @@ describe('GET /health', () => {
     expect(body.status).toBe('ok')
   })
 })
+
+describe('GET / — marketing page', () => {
+  it('returns 200', async () => {
+    const req = new Request('https://example.com/', { method: 'GET' })
+    const ctx = createExecutionContext()
+    const res = await worker.fetch(req, env, ctx)
+    await waitOnExecutionContext(ctx)
+    expect(res.status).toBe(200)
+  })
+
+  it('returns HTML content type', async () => {
+    const req = new Request('https://example.com/', { method: 'GET' })
+    const ctx = createExecutionContext()
+    const res = await worker.fetch(req, env, ctx)
+    await waitOnExecutionContext(ctx)
+    expect(res.headers.get('Content-Type')).toContain('text/html')
+  })
+
+  it('contains Discogs MCP in the body', async () => {
+    const req = new Request('https://example.com/', { method: 'GET' })
+    const ctx = createExecutionContext()
+    const res = await worker.fetch(req, env, ctx)
+    await waitOnExecutionContext(ctx)
+    const body = await res.text()
+    expect(body).toContain('Discogs MCP')
+  })
+
+  it('contains the setup URL', async () => {
+    const req = new Request('https://example.com/', { method: 'GET' })
+    const ctx = createExecutionContext()
+    const res = await worker.fetch(req, env, ctx)
+    await waitOnExecutionContext(ctx)
+    const body = await res.text()
+    expect(body).toContain('discogs-mcp.com/mcp')
+  })
+})
