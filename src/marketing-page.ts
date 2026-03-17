@@ -113,6 +113,9 @@ export const MARKETING_PAGE_HTML = `<!DOCTYPE html>
         .hero {
             display: flex;
             min-height: 280px;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
         }
 
         .hero-left {
@@ -447,7 +450,7 @@ export const MARKETING_PAGE_HTML = `<!DOCTYPE html>
             .hero { display: block; }
             .hero-left { padding: 40px 24px 32px; }
             .hero-left h1 { font-size: 1.8rem; }
-            .hero-right { width: 100%; height: 180px; }
+            .hero-right { width: 100%; height: auto; padding: 28px 32px; }
             .query-grid { grid-template-columns: 1fr; }
             nav { gap: 16px; }
             .cta-row { flex-direction: column; align-items: center; }
@@ -476,13 +479,11 @@ export const MARKETING_PAGE_HTML = `<!DOCTYPE html>
     <main>
         <section class="hero">
             <div class="hero-left">
-                <div class="container" style="padding-left: 0; padding-right: 0;">
-                    <h1>Your records,<br><span class="hl">AI-powered</span></h1>
-                    <p>Discogs MCP is a Model Context Protocol server that connects Claude and other AI assistants to your Discogs record collection. Search by genre, decade, or just tell it you want <strong>something for a rainy Sunday</strong>.</p>
-                    <div class="cta-row">
-                        <a href="#setup" class="btn btn-primary">Get Started</a>
-                        <a href="https://github.com/rianvdm/discogs-mcp" class="btn btn-secondary">View Source</a>
-                    </div>
+                <h1>Your records,<br><span class="hl">AI-powered</span></h1>
+                <p>Discogs MCP is a Model Context Protocol server that connects Claude and other AI assistants to your Discogs record collection. Search by genre, decade, or just tell it you want <strong>something for a rainy Sunday</strong>.</p>
+                <div class="cta-row">
+                    <a href="#setup" class="btn btn-primary">Get Started</a>
+                    <a href="https://github.com/rianvdm/discogs-mcp" class="btn btn-secondary">View Source</a>
                 </div>
             </div>
             <div class="hero-right">
