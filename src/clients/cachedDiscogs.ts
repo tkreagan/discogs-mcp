@@ -189,15 +189,16 @@ export class CachedDiscogsClient {
 	}
 
 	/**
-	 * Fetch the complete collection with intelligent pagination and caching.
+	 * Fetch the user's complete collection, assembling all paginated pages.
+	 * Used by tools that need to operate on the full collection in-memory
+	 * (search, stats, recommendations). The complete result is cached in KV,
+	 * so the first call on cold cache pays the pagination cost; all subsequent
+	 * calls return instantly.
 	 *
-	 * This is the primary method tools should use when they need access to the
-	 * full collection (search, stats, recommendations). The complete result is
-	 * cached for 45 minutes, so the first call pays the pagination cost but all
-	 * subsequent calls return instantly from cache.
-	 *
-	 * For a 1000-item collection this costs ~11 API calls on cold cache, 0 on warm.
-	 * For a 5000-item collection this costs ~50 API calls on cold cache (~55s at Discogs rate limits).
+	 * Time-budgeted: if `timeBudgetMs` is hit before all pages are fetched,
+	 * returns a result with `partial: true`. Each page is cached individually
+	 * by searchCollection(), so a retry call skips already-cached pages and
+	 * continues from where the previous call left off.
 	 */
 	async getCompleteCollection(
 		username: string,
@@ -205,64 +206,80 @@ export class CachedDiscogsClient {
 		accessTokenSecret: string,
 		consumerKey: string,
 		consumerSecret: string,
-		maxPages: number = 50, // Supports up to 5000 items at 100/page
-	): Promise<DiscogsCollectionResponse> {
+		maxPages: number = 50,
+		timeBudgetMs: number = 35000,
+	): Promise<DiscogsCollectionResponse & { partial?: boolean }> {
 		const cacheKey = `${username}:complete:${maxPages}`
 
-		return this.cache.getOrFetch(
-			'collections',
-			cacheKey,
-			async () => {
-				console.log(`Fetching complete collection for ${username} (max ${maxPages} pages)`)
+		// Return cached complete (non-partial) result immediately
+		const cached = await this.cache.get<DiscogsCollectionResponse & { partial?: boolean }>('collections', cacheKey)
+		if (cached && !cached.partial) {
+			return cached
+		}
 
-				let allReleases: DiscogsCollectionItem[] = []
-				let currentPage = 1
-				let totalPages = 1
-				let actualTotalItems = 0
+		console.log(`Fetching complete collection for ${username} (max ${maxPages} pages, budget ${timeBudgetMs}ms)`)
+		const startTime = Date.now()
+		let allReleases: DiscogsCollectionItem[] = []
+		let currentPage = 1
+		let totalPages = 1
+		let actualTotalItems = 0
+		let timedOut = false
 
-				do {
-					const pageResult = await this.searchCollection(
-						username,
-						accessToken,
-						accessTokenSecret,
-						{ page: currentPage, per_page: 100 },
-						consumerKey,
-						consumerSecret,
-					)
+		do {
+			// Check time budget before each page fetch
+			if (Date.now() - startTime > timeBudgetMs) {
+				console.log(`Time budget exceeded after ${currentPage - 1} pages (${Date.now() - startTime}ms)`)
+				timedOut = true
+				break
+			}
 
-					// Capture the real Discogs total from the first page only.
-					// Never overwrite — pagination.items is stable across all pages.
-					if (currentPage === 1) {
-						actualTotalItems = pageResult.pagination.items
-					}
+			const pageResult = await this.searchCollection(
+				username,
+				accessToken,
+				accessTokenSecret,
+				{ page: currentPage, per_page: 100 },
+				consumerKey,
+				consumerSecret,
+			)
 
-					allReleases = allReleases.concat(pageResult.releases)
-					totalPages = Math.min(pageResult.pagination.pages, maxPages)
-					currentPage++
-				} while (currentPage <= totalPages)
+			if (currentPage === 1) {
+				actualTotalItems = pageResult.pagination.items
+			}
 
-				const isTruncated = actualTotalItems > allReleases.length
-				if (isTruncated) {
-					console.log(
-						`Collection truncated: indexed ${allReleases.length} of ${actualTotalItems} items (hit ${maxPages}-page limit).`,
-					)
-				}
+			allReleases = allReleases.concat(pageResult.releases)
+			totalPages = Math.min(pageResult.pagination.pages, maxPages)
+			currentPage++
+		} while (currentPage <= totalPages)
 
-				// pagination.pages = pages actually fetched (clamped to maxPages).
-				// pagination.items = REAL Discogs total, even when truncated.
-				// Tool-layer truncation checks must use pagination.items, not pagination.pages.
-				return {
-					pagination: {
-						pages: totalPages,
-						page: 1,
-						per_page: allReleases.length,
-						items: actualTotalItems || allReleases.length,
-						urls: {},
-					},
-					releases: allReleases,
-				}
+		const isTruncated = actualTotalItems > allReleases.length
+
+		const result: DiscogsCollectionResponse & { partial?: boolean } = {
+			pagination: {
+				pages: totalPages,
+				page: 1,
+				per_page: allReleases.length,
+				items: actualTotalItems || allReleases.length,
+				urls: {} as { last?: string; next?: string },
 			},
-		)
+			releases: allReleases,
+			// Only set `partial` when true — absence means complete (tests check `=== undefined`)
+			...(timedOut ? { partial: true } : {}),
+		}
+
+		// Only cache complete results. Partial results are NOT cached at the
+		// complete-collection level — individual pages are already cached by
+		// searchCollection(), so the next call flies through them and continues.
+		if (!timedOut) {
+			await this.cache.set('collections', cacheKey, result)
+
+			if (isTruncated) {
+				console.log(
+					`Collection truncated: indexed ${allReleases.length} of ${actualTotalItems} items (hit ${maxPages}-page limit).`,
+				)
+			}
+		}
+
+		return result
 	}
 
 	/**

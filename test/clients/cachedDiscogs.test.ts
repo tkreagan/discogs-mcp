@@ -94,3 +94,94 @@ describe('CachedDiscogsClient.getCompleteCollection', () => {
     expect(truncationLogs).toHaveLength(0)
   })
 })
+
+describe('CachedDiscogsClient.getCompleteCollection — time budget', () => {
+  let client: CachedDiscogsClient
+  let mockSearchCollection: ReturnType<typeof vi.fn>
+  let kv: KVNamespace
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    kv = makeKV()
+    client = new CachedDiscogsClient({ setKV: vi.fn() } as unknown as DiscogsClient, kv)
+    mockSearchCollection = vi.fn()
+    vi.spyOn(client as never, 'searchCollection').mockImplementation(mockSearchCollection)
+  })
+
+  it('returns partial:true when time budget is exceeded mid-fetch', async () => {
+    // Use fake timers so the test is deterministic regardless of machine speed
+    vi.useFakeTimers()
+
+    mockSearchCollection.mockImplementation(
+      async (_u: string, _a: string, _s: string, opts: { page: number }) => {
+        await vi.advanceTimersByTimeAsync(50)
+        return makePageResponse(opts.page, 5, 500)
+      }
+    )
+
+    // Budget of 75ms: fits page 1 (50ms) but not page 2 (would be 100ms total)
+    const resultPromise = client.getCompleteCollection('user', 'tok', 'sec', 'key', 'csec', 50, 75)
+    await vi.runAllTimersAsync()
+    const result = await resultPromise
+
+    expect(result.partial).toBe(true)
+    expect(result.releases.length).toBeGreaterThan(0)
+    expect(result.releases.length).toBeLessThan(500)
+
+    vi.useRealTimers()
+  })
+
+  it('returns partial:undefined and full data when budget is sufficient', async () => {
+    // 3-page collection, generous budget
+    mockSearchCollection.mockImplementation((_u: string, _a: string, _s: string, opts: { page: number }) =>
+      Promise.resolve(makePageResponse(opts.page, 3, 300))
+    )
+
+    const result = await client.getCompleteCollection('user', 'tok', 'sec', 'key', 'csec', 50, 30000)
+
+    expect(result.partial).toBeUndefined() // no partial flag on complete results
+    expect(result.releases).toHaveLength(300)
+  })
+
+  it('does not cache partial results at the complete-collection level', async () => {
+    vi.useFakeTimers()
+
+    // First call: tight budget — returns partial
+    mockSearchCollection.mockImplementation(
+      async (_u: string, _a: string, _s: string, opts: { page: number }) => {
+        await vi.advanceTimersByTimeAsync(50)
+        return makePageResponse(opts.page, 5, 500)
+      }
+    )
+
+    const firstPromise = client.getCompleteCollection('user', 'tok', 'sec', 'key', 'csec', 50, 75)
+    await vi.runAllTimersAsync()
+    await firstPromise
+
+    vi.useRealTimers()
+
+    // Second call: generous budget — should NOT return a cached partial result
+    mockSearchCollection.mockImplementation((_u: string, _a: string, _s: string, opts: { page: number }) =>
+      Promise.resolve(makePageResponse(opts.page, 5, 500))
+    )
+
+    const result = await client.getCompleteCollection('user', 'tok', 'sec', 'key', 'csec', 50, 30000)
+
+    expect(result.partial).toBeUndefined()
+    expect(result.releases).toHaveLength(500)
+  })
+
+  it('caches complete result so second call makes zero API calls', async () => {
+    mockSearchCollection.mockImplementation((_u: string, _a: string, _s: string, opts: { page: number }) =>
+      Promise.resolve(makePageResponse(opts.page, 3, 300))
+    )
+
+    await client.getCompleteCollection('user', 'tok', 'sec', 'key', 'csec', 50, 30000)
+    const callsAfterFirst = mockSearchCollection.mock.calls.length
+
+    await client.getCompleteCollection('user', 'tok', 'sec', 'key', 'csec', 50, 30000)
+
+    // Second call should hit KV cache; no additional searchCollection calls
+    expect(mockSearchCollection.mock.calls.length).toBe(callsAfterFirst)
+  })
+})
