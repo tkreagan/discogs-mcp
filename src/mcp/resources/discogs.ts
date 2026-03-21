@@ -2,7 +2,7 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import type { Env } from '../../types/env.js'
 import { DiscogsClient } from '../../clients/discogs.js'
 import { CachedDiscogsClient } from '../../clients/cachedDiscogs.js'
-import type { DiscogsCollectionItem } from '../../clients/discogs.js'
+import type { DiscogsCollectionItem, DiscogsCollectionResponse } from '../../clients/discogs.js'
 import type { SessionContext } from '../server.js'
 
 /**
@@ -44,15 +44,32 @@ export function registerResources(server: McpServer, env: Env, getSessionContext
 				// Use getCompleteCollection() when cached client is available
 				// to return the full collection (not just page 1) and benefit
 				// from the shared 45-min cache.
-				let collection
+				let collection: (DiscogsCollectionResponse & { partial?: boolean }) | undefined
 				if (cachedClient) {
+					const toolStart = Date.now()
+					const TOOL_BUDGET_MS = 40000
+
 					collection = await cachedClient.getCompleteCollection(
 						userProfile.username,
 						session.accessToken,
 						session.accessTokenSecret,
 						env.DISCOGS_CONSUMER_KEY,
 						env.DISCOGS_CONSUMER_SECRET,
+						50,
+						30000,
 					)
+					while (collection.partial && Date.now() - toolStart < TOOL_BUDGET_MS - 5000) {
+						const remaining = Math.max(TOOL_BUDGET_MS - (Date.now() - toolStart), 5000)
+						collection = await cachedClient.getCompleteCollection(
+							userProfile.username,
+							session.accessToken,
+							session.accessTokenSecret,
+							env.DISCOGS_CONSUMER_KEY,
+							env.DISCOGS_CONSUMER_SECRET,
+							50,
+							remaining,
+						)
+					}
 				} else {
 					collection = await client.searchCollection(
 						userProfile.username,
@@ -157,13 +174,29 @@ export function registerResources(server: McpServer, env: Env, getSessionContext
 				// complete collection instead of triggering a full pagination.
 				let searchResults
 				if (cachedClient) {
-					const allReleases = await cachedClient.getCompleteCollectionReleases(
+					const toolStart = Date.now()
+					const TOOL_BUDGET_MS = 40000
+
+					let collectionResult = await cachedClient.getCompleteCollectionReleases(
 						userProfile.username,
 						session.accessToken,
 						session.accessTokenSecret,
 						env.DISCOGS_CONSUMER_KEY,
 						env.DISCOGS_CONSUMER_SECRET,
+						30000,
 					)
+					while (collectionResult.partial && Date.now() - toolStart < TOOL_BUDGET_MS - 5000) {
+						const remaining = Math.max(TOOL_BUDGET_MS - (Date.now() - toolStart), 5000)
+						collectionResult = await cachedClient.getCompleteCollectionReleases(
+							userProfile.username,
+							session.accessToken,
+							session.accessTokenSecret,
+							env.DISCOGS_CONSUMER_KEY,
+							env.DISCOGS_CONSUMER_SECRET,
+							remaining,
+						)
+					}
+					const allReleases = collectionResult.releases
 
 					// Simple in-memory search filter
 					const queryLower = (query as string).toLowerCase()

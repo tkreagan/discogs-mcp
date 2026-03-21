@@ -145,9 +145,9 @@ export class DiscogsClient {
 	}
 
 	// Minimum delay between Discogs API requests (proactive rate limiting)
-	// Discogs allows 60 authenticated requests per minute = 1 per second
-	// Using 1100ms to leave a safe buffer
-	private readonly REQUEST_DELAY_MS = 1100
+	// Discogs allows 60 authenticated requests per minute = 1000ms minimum interval
+	// Retry logic in retry.ts handles any 429 responses with exponential backoff
+	private readonly REQUEST_DELAY_MS = 1000
 
 	/**
 	 * Set KV namespace for persistent throttling across Worker invocations
