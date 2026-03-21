@@ -454,19 +454,38 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 				let allReleases: DiscogsCollectionItem[] = []
 				let collectionTruncationNote = ''
 
-				if (cachedClient) {
-					// Fetch complete collection once (cached for 45 min)
-					const collection = await cachedClient.getCompleteCollection(
+			if (cachedClient) {
+				// Fetch complete collection with auto-retry so large collections don't exceed the 45s MCP timeout.
+				// Cached pages are free (~10ms from KV), so retries only spend budget on uncached pages.
+				const toolStart = Date.now()
+				const TOOL_BUDGET_MS = 40000 // 40s total; 5s margin before 45s MCP timeout
+
+				let collection = await cachedClient.getCompleteCollection(
+					userProfile.username,
+					session.accessToken,
+					session.accessTokenSecret,
+					env.DISCOGS_CONSUMER_KEY,
+					env.DISCOGS_CONSUMER_SECRET,
+					50,
+					30000,
+				)
+				while (collection.partial && Date.now() - toolStart < TOOL_BUDGET_MS) {
+					const remaining = Math.max(TOOL_BUDGET_MS - (Date.now() - toolStart), 5000)
+					collection = await cachedClient.getCompleteCollection(
 						userProfile.username,
 						session.accessToken,
 						session.accessTokenSecret,
 						env.DISCOGS_CONSUMER_KEY,
 						env.DISCOGS_CONSUMER_SECRET,
+						50,
+						remaining,
 					)
-					allReleases = collection.releases
-					if (collection.pagination.items > collection.releases.length) {
-						collectionTruncationNote = `\n\n⚠️ Your collection has ${collection.pagination.items} releases but only ${collection.releases.length} were indexed. Some results may be missing.`
-					}
+				}
+
+				allReleases = collection.releases
+				if (collection.partial || collection.pagination.items > collection.releases.length) {
+					collectionTruncationNote = `\n\n⚠️ Your collection has ${collection.pagination.items} releases but only ${collection.releases.length} were indexed. Some results may be missing.`
+				}
 
 					// Semantic query detection: if the query is conceptual/descriptive
 					// (not matching artists, albums, genres, or moods), short-circuit
@@ -675,17 +694,35 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 				let stats
 				let collectionTotalItems = 0
 				let collectionIndexedItems = 0
-				if (cachedClient) {
-					const collection = await cachedClient.getCompleteCollection(
+			if (cachedClient) {
+				const toolStart = Date.now()
+				const TOOL_BUDGET_MS = 40000
+
+				let collection = await cachedClient.getCompleteCollection(
+					userProfile.username,
+					session.accessToken,
+					session.accessTokenSecret,
+					env.DISCOGS_CONSUMER_KEY,
+					env.DISCOGS_CONSUMER_SECRET,
+					50,
+					30000,
+				)
+				while (collection.partial && Date.now() - toolStart < TOOL_BUDGET_MS) {
+					const remaining = Math.max(TOOL_BUDGET_MS - (Date.now() - toolStart), 5000)
+					collection = await cachedClient.getCompleteCollection(
 						userProfile.username,
 						session.accessToken,
 						session.accessTokenSecret,
 						env.DISCOGS_CONSUMER_KEY,
 						env.DISCOGS_CONSUMER_SECRET,
+						50,
+						remaining,
 					)
-					stats = cachedClient.computeStatsFromReleases(collection.releases)
-					collectionTotalItems = collection.pagination.items
-					collectionIndexedItems = collection.releases.length
+				}
+
+				stats = cachedClient.computeStatsFromReleases(collection.releases)
+				collectionTotalItems = collection.pagination.items
+				collectionIndexedItems = collection.releases.length
 				} else {
 					stats = await client.getCollectionStats(
 						userProfile.username,
@@ -821,15 +858,31 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 				// Get full collection for context-aware recommendations.
 				// Uses getCompleteCollectionReleases() when cached client is available
 				// (single fetch, cached for 45 min) instead of manual pagination.
-				let allReleases: DiscogsCollectionItem[]
-				if (cachedClient) {
-					allReleases = await cachedClient.getCompleteCollectionReleases(
+			let allReleases: DiscogsCollectionItem[]
+			if (cachedClient) {
+				const toolStart = Date.now()
+				const TOOL_BUDGET_MS = 40000
+
+				let collectionResult = await cachedClient.getCompleteCollectionReleases(
+					userProfile.username,
+					session.accessToken,
+					session.accessTokenSecret,
+					env.DISCOGS_CONSUMER_KEY,
+					env.DISCOGS_CONSUMER_SECRET,
+					30000,
+				)
+				while (collectionResult.partial && Date.now() - toolStart < TOOL_BUDGET_MS) {
+					const remaining = Math.max(TOOL_BUDGET_MS - (Date.now() - toolStart), 5000)
+					collectionResult = await cachedClient.getCompleteCollectionReleases(
 						userProfile.username,
 						session.accessToken,
 						session.accessTokenSecret,
 						env.DISCOGS_CONSUMER_KEY,
 						env.DISCOGS_CONSUMER_SECRET,
+						remaining,
 					)
+				}
+				allReleases = collectionResult.releases
 				} else {
 					// Fallback: manual pagination when no cached client
 					const fullCollection = await client.searchCollection(
