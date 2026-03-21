@@ -226,8 +226,8 @@ export class CachedDiscogsClient {
 		let timedOut = false
 
 		do {
-			// Check time budget before each page fetch
-			if (Date.now() - startTime > timeBudgetMs) {
+			// Only check budget after the first page — we always fetch at least one page
+			if (currentPage > 1 && Date.now() - startTime > timeBudgetMs) {
 				console.log(`Time budget exceeded after ${currentPage - 1} pages (${Date.now() - startTime}ms)`)
 				timedOut = true
 				break
@@ -269,7 +269,11 @@ export class CachedDiscogsClient {
 		// Only cache complete results. Partial results are NOT cached at the
 		// complete-collection level — individual pages are already cached by
 		// searchCollection(), so the next call flies through them and continues.
-		if (!timedOut) {
+		if (timedOut) {
+			console.log(
+				`Partial collection: fetched ${allReleases.length} of ${actualTotalItems} items (time budget exhausted).`,
+			)
+		} else {
 			await this.cache.set('collections', cacheKey, result)
 
 			if (isTruncated) {
