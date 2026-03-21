@@ -15,7 +15,7 @@
 | File | What changes |
 |------|-------------|
 | `src/mcp/tools/authenticated.ts` | New `extractSemanticFilterTerms()` function; updated `search_collection` handler routing; updated `formatCollectionForSemanticSearch()` instructions; updated tool description |
-| `test/utils/semanticSearch.test.ts` | New test file for `extractSemanticFilterTerms` |
+| `test/mcp/tools/semanticSearch.test.ts` | New test file for `extractSemanticFilterTerms` and `shouldUseBroadSearch` |
 
 `isSemanticQuery`, `filterReleasesInMemory`, and `moodMapping.ts` are **not changed**.
 
@@ -24,19 +24,19 @@
 ## Task 1: `extractSemanticFilterTerms` — tests first
 
 **Files:**
-- Create: `test/utils/semanticSearch.test.ts`
+- Create: `test/mcp/tools/semanticSearch.test.ts`
 
-The function `extractSemanticFilterTerms(query: string): string[]` will live inside `src/mcp/tools/authenticated.ts` (as a module-level function alongside `isSemanticQuery`). Tests import it directly.
+The function `extractSemanticFilterTerms(query: string): string[]` will be a new module-level export in `src/mcp/tools/authenticated.ts`. Tests import it directly.
 
-Since this function is currently inside a closure, it will need to be extracted to module level so it can be tested. The plan for that extraction is in Task 2.
+Note: `isSemanticQuery` lives inside the `registerAuthenticatedTools` closure and is NOT being moved. The new functions are created at module level so they can be exported and tested.
 
 - [ ] **Step 1: Write the failing test file**
 
-Create `test/utils/semanticSearch.test.ts` with the following content:
+Create `test/mcp/tools/semanticSearch.test.ts` with the following content:
 
 ```typescript
 import { describe, it, expect } from 'vitest'
-import { extractSemanticFilterTerms, shouldUseBroadSearch } from '../../src/mcp/tools/authenticated'
+import { extractSemanticFilterTerms, shouldUseBroadSearch } from '../../../src/mcp/tools/authenticated'
 
 describe('extractSemanticFilterTerms', () => {
   it('strips common stop words and returns meaningful terms', () => {
@@ -72,7 +72,7 @@ describe('extractSemanticFilterTerms', () => {
 - [ ] **Step 2: Run test to confirm it fails**
 
 ```bash
-npm test -- test/utils/semanticSearch.test.ts --run
+npm test -- test/mcp/tools/semanticSearch.test.ts --run
 ```
 
 Expected: FAIL — `extractSemanticFilterTerms` is not exported from `authenticated.ts`.
@@ -118,7 +118,7 @@ export function extractSemanticFilterTerms(query: string): string[] {
 - [ ] **Step 2: Run the tests**
 
 ```bash
-npm test -- test/utils/semanticSearch.test.ts --run
+npm test -- test/mcp/tools/semanticSearch.test.ts --run
 ```
 
 Expected: all 7 tests pass.
@@ -134,7 +134,7 @@ Expected: all pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/mcp/tools/authenticated.ts test/utils/semanticSearch.test.ts
+git add src/mcp/tools/authenticated.ts test/mcp/tools/semanticSearch.test.ts
 git commit -m "feat: add extractSemanticFilterTerms utility function"
 ```
 
@@ -143,7 +143,7 @@ git commit -m "feat: add extractSemanticFilterTerms utility function"
 ## Task 3: Update `search_collection` routing — tests first
 
 **Files:**
-- Modify: `test/utils/semanticSearch.test.ts`
+- Modify: `test/mcp/tools/semanticSearch.test.ts`
 
 Before changing the routing logic, write tests that describe the new behaviour. These will be integration-style tests using mock data, testing the routing decisions directly.
 
@@ -156,7 +156,7 @@ Since `search_collection` is a large handler with auth dependencies, we test the
 
 - [ ] **Step 1: Add tests for `shouldUseBroadSearch`**
 
-Append to `test/utils/semanticSearch.test.ts` (the import at the top of the file already includes `shouldUseBroadSearch` — added in Task 1):
+Append to `test/mcp/tools/semanticSearch.test.ts` (the import at the top of the file already includes `shouldUseBroadSearch` — added in Task 1):
 
 ```typescript
 describe('shouldUseBroadSearch', () => {
@@ -195,13 +195,33 @@ describe('shouldUseBroadSearch', () => {
   it('is case-insensitive', () => {
     expect(shouldUseBroadSearch('Search More Broadly')).toBe(true)
   })
+
+  it('returns false when broad phrase is embedded in a real query', () => {
+    expect(shouldUseBroadSearch('show all Miles Davis')).toBe(false)
+  })
+
+  it('returns false for "show all jazz albums"', () => {
+    expect(shouldUseBroadSearch('show all jazz albums')).toBe(false)
+  })
+
+  it('returns true when broad phrase has trailing punctuation', () => {
+    expect(shouldUseBroadSearch('show everything!')).toBe(true)
+  })
+
+  it('returns true for "please show more" with filler words', () => {
+    expect(shouldUseBroadSearch('please show more')).toBe(true)
+  })
+
+  it('returns true for "can you search more broadly?"', () => {
+    expect(shouldUseBroadSearch('can you search more broadly?')).toBe(true)
+  })
 })
 ```
 
 - [ ] **Step 2: Run tests to confirm they fail**
 
 ```bash
-npm test -- test/utils/semanticSearch.test.ts --run
+npm test -- test/mcp/tools/semanticSearch.test.ts --run
 ```
 
 Expected: the `shouldUseBroadSearch` tests fail (function not yet defined).
@@ -221,25 +241,38 @@ Add immediately after `extractSemanticFilterTerms`:
 /**
  * Returns true if the query is explicitly asking for a broad/full collection search.
  * These queries bypass the best-effort semantic filter and go straight to the LLM dump.
+ *
+ * Uses strict matching: the query must be essentially just a broad-search phrase,
+ * optionally surrounded by filler words (please, can you, etc.) and punctuation.
+ * "show all" matches, but "show all Miles Davis" does NOT — that's a real query.
  */
 export function shouldUseBroadSearch(query: string): boolean {
-  const q = query.toLowerCase().trim()
-  const broadSearchPhrases = [
+  // Strip filler words and punctuation, then check for an exact broad-search phrase
+  const FILLER_WORDS = new Set(['please', 'can', 'you', 'could', 'would', 'just', 'ok', 'okay', 'yes', 'yeah', 'sure'])
+  const meaningful = query
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, '') // strip punctuation
+    .split(/\s+/)
+    .filter((w) => w.length > 0 && !FILLER_WORDS.has(w))
+    .join(' ')
+    .trim()
+
+  const broadSearchPhrases = new Set([
     'search more broadly',
     'show more',
     'full collection',
     'broader search',
     'show everything',
     'show all',
-  ]
-  return broadSearchPhrases.some((phrase) => q.includes(phrase))
+  ])
+  return broadSearchPhrases.has(meaningful)
 }
 ```
 
 - [ ] **Step 2: Run `shouldUseBroadSearch` tests**
 
 ```bash
-npm test -- test/utils/semanticSearch.test.ts --run
+npm test -- test/mcp/tools/semanticSearch.test.ts --run
 ```
 
 Expected: all tests pass.
@@ -333,7 +366,7 @@ if (isSemanticQuery(query, allReleases) || shouldUseBroadSearch(query)) {
 - [ ] **Step 4: Run lint and tests**
 
 ```bash
-npm run lint && npm test -- test/utils/semanticSearch.test.ts test/clients/cachedDiscogs.test.ts --run
+npm run lint && npm test -- test/mcp/tools/semanticSearch.test.ts test/clients/cachedDiscogs.test.ts --run
 ```
 
 Expected: lint clean, all tests pass.
@@ -341,7 +374,7 @@ Expected: lint clean, all tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/mcp/tools/authenticated.ts test/utils/semanticSearch.test.ts
+git add src/mcp/tools/authenticated.ts test/mcp/tools/semanticSearch.test.ts
 git commit -m "feat: best-effort keyword filter for semantic search with broad-search fallback"
 ```
 
