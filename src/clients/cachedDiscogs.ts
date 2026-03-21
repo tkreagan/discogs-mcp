@@ -288,7 +288,8 @@ export class CachedDiscogsClient {
 
 	/**
 	 * Convenience: get just the releases array from the complete collection.
-	 * Useful for tools that need to filter/process all releases in-memory.
+	 * Passes through `timeBudgetMs` and propagates `partial` so the tool layer
+	 * can apply its own retry loop.
 	 */
 	async getCompleteCollectionReleases(
 		username: string,
@@ -296,9 +297,13 @@ export class CachedDiscogsClient {
 		accessTokenSecret: string,
 		consumerKey: string,
 		consumerSecret: string,
-	): Promise<DiscogsCollectionItem[]> {
-		const collection = await this.getCompleteCollection(username, accessToken, accessTokenSecret, consumerKey, consumerSecret)
-		return collection.releases
+		timeBudgetMs: number = 35000,
+	): Promise<{ releases: DiscogsCollectionItem[]; partial?: boolean }> {
+		const collection = await this.getCompleteCollection(
+			username, accessToken, accessTokenSecret, consumerKey, consumerSecret,
+			50, timeBudgetMs,
+		)
+		return { releases: collection.releases, partial: collection.partial }
 	}
 
 	/**
