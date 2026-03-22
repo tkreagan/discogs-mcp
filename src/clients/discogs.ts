@@ -144,10 +144,13 @@ export class DiscogsClient {
 		jitterFactor: 0.1,
 	}
 
-	// Minimum delay between Discogs API requests (proactive rate limiting)
-	// Discogs allows 60 authenticated requests per minute = 1000ms minimum interval
-	// Retry logic in retry.ts handles any 429 responses with exponential backoff
-	private readonly REQUEST_DELAY_MS = 1000
+	// Minimum delay between Discogs API requests (proactive rate limiting).
+	// Discogs allows 60 authenticated requests per minute = 1000ms minimum.
+	// Set to 1500ms for concurrency safety: when multiple MCP tool calls run
+	// concurrently, the KV-based throttle has a read-then-write race condition
+	// that lets two requests slip through simultaneously. At 1500ms each, even
+	// doubled that's ~40 req/min — safely within the 60/min limit.
+	private readonly REQUEST_DELAY_MS = 1500
 
 	/**
 	 * Set KV namespace for persistent throttling across Worker invocations

@@ -22,12 +22,51 @@ import { SmartCache, CacheKeys, createDiscogsCache } from '../utils/cache'
 export class CachedDiscogsClient {
 	private client: DiscogsClient
 	private cache: SmartCache
+	private readonly FETCH_LOCK_TTL = 120 // 2 minutes — long enough for a full collection fetch
 
 	constructor(client: DiscogsClient, kv: KVNamespace) {
 		this.client = client
 		this.cache = createDiscogsCache(kv)
 		// Set KV on the underlying client for persistent throttling
 		this.client.setKV(kv)
+	}
+
+	/**
+	 * Try to acquire a KV-based fetch lock. Returns true if lock was acquired.
+	 * Prevents concurrent getCompleteCollection calls from doubling API usage.
+	 * Uses a short TTL so locks auto-expire if the fetcher crashes.
+	 */
+	private async tryAcquireFetchLock(lockKey: string): Promise<boolean> {
+		try {
+			const kv = this.cache.getKV()
+			const existing = await kv.get(lockKey)
+			if (existing) {
+				// Validate this is actually a lock value (timestamp string), not
+				// unrelated data from a shared KV namespace.
+				const lockTime = Number(existing)
+				if (!isNaN(lockTime) && Date.now() - lockTime < this.FETCH_LOCK_TTL * 1000) {
+					return false // Lock is held and not expired
+				}
+				// Not a valid lock or already expired — safe to acquire
+			}
+			// Small race window remains (read-then-write), but it's much narrower
+			// than the throttle race. Worst case: two fetchers run, but the wider
+			// throttle delay (1500ms) keeps combined rate within Discogs limits.
+			await kv.put(lockKey, Date.now().toString(), {
+				expirationTtl: this.FETCH_LOCK_TTL,
+			})
+			return true
+		} catch {
+			return true // Fail open: if KV errors, proceed with fetch
+		}
+	}
+
+	private async releaseFetchLock(lockKey: string): Promise<void> {
+		try {
+			await this.cache.getKV().delete(lockKey)
+		} catch {
+			// Lock will auto-expire via TTL
+		}
 	}
 
 	/**
@@ -217,73 +256,104 @@ export class CachedDiscogsClient {
 			return cached
 		}
 
-		console.log(`Fetching complete collection for ${username} (max ${maxPages} pages, budget ${timeBudgetMs}ms)`)
-		const startTime = Date.now()
-		let allReleases: DiscogsCollectionItem[] = []
-		let currentPage = 1
-		let totalPages = 1
-		let actualTotalItems = 0
-		let timedOut = false
+		// Acquire fetch lock to prevent concurrent callers (e.g. search_collection
+		// + get_recommendations in the same turn) from doubling API requests.
+		const lockKey = `fetch-lock:collection:${username}`
+		const acquiredLock = await this.tryAcquireFetchLock(lockKey)
 
-		do {
-			// Only check budget after the first page — we always fetch at least one page
-			if (currentPage > 1 && Date.now() - startTime > timeBudgetMs) {
-				console.log(`Time budget exceeded after ${currentPage - 1} pages (${Date.now() - startTime}ms)`)
-				timedOut = true
-				break
-			}
+		if (!acquiredLock) {
+			// Another caller is already fetching — poll cache for the result.
+			console.log(`Collection fetch already in progress for ${username}, waiting for cache...`)
+			const pollStart = Date.now()
+			const POLL_TIMEOUT_MS = Math.min(timeBudgetMs, 45000)
+			const POLL_INTERVAL_MS = 2000
 
-			const pageResult = await this.searchCollection(
-				username,
-				accessToken,
-				accessTokenSecret,
-				{ page: currentPage, per_page: 100 },
-				consumerKey,
-				consumerSecret,
-			)
-
-			if (currentPage === 1) {
-				actualTotalItems = pageResult.pagination.items
-			}
-
-			allReleases = allReleases.concat(pageResult.releases)
-			totalPages = Math.min(pageResult.pagination.pages, maxPages)
-			currentPage++
-		} while (currentPage <= totalPages)
-
-		const isTruncated = actualTotalItems > allReleases.length
-
-		const result: DiscogsCollectionResponse & { partial?: boolean } = {
-			pagination: {
-				pages: totalPages,
-				page: 1,
-				per_page: allReleases.length,
-				items: actualTotalItems || allReleases.length,
-				urls: {} as { last?: string; next?: string },
-			},
-			releases: allReleases,
-			// Only set `partial` when true — absence means complete (tests check `=== undefined`)
-			...(timedOut ? { partial: true } : {}),
-		}
-
-		// Only cache complete results. Partial results are NOT cached at the
-		// complete-collection level — individual pages are already cached by
-		// searchCollection(), so the next call flies through them and continues.
-		if (timedOut) {
-			console.log(
-				`Partial collection: fetched ${allReleases.length} of ${actualTotalItems} items (time budget exhausted).`,
-			)
-		} else {
-			await this.cache.set('collections', cacheKey, result)
-
-			if (isTruncated) {
-				console.log(
-					`Collection truncated: indexed ${allReleases.length} of ${actualTotalItems} items (hit ${maxPages}-page limit).`,
+			while (Date.now() - pollStart < POLL_TIMEOUT_MS) {
+				await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+				const polled = await this.cache.get<DiscogsCollectionResponse & { partial?: boolean }>(
+					'collections',
+					cacheKey,
 				)
+				if (polled && !polled.partial) {
+					return polled
+				}
 			}
+			// Polling timed out — fall through and fetch (original lock will have expired)
 		}
 
-		return result
+		try {
+			console.log(`Fetching complete collection for ${username} (max ${maxPages} pages, budget ${timeBudgetMs}ms)`)
+			const startTime = Date.now()
+			let allReleases: DiscogsCollectionItem[] = []
+			let currentPage = 1
+			let totalPages = 1
+			let actualTotalItems = 0
+			let timedOut = false
+
+			do {
+				// Only check budget after the first page — we always fetch at least one page
+				if (currentPage > 1 && Date.now() - startTime > timeBudgetMs) {
+					console.log(`Time budget exceeded after ${currentPage - 1} pages (${Date.now() - startTime}ms)`)
+					timedOut = true
+					break
+				}
+
+				const pageResult = await this.searchCollection(
+					username,
+					accessToken,
+					accessTokenSecret,
+					{ page: currentPage, per_page: 100 },
+					consumerKey,
+					consumerSecret,
+				)
+
+				if (currentPage === 1) {
+					actualTotalItems = pageResult.pagination.items
+				}
+
+				allReleases = allReleases.concat(pageResult.releases)
+				totalPages = Math.min(pageResult.pagination.pages, maxPages)
+				currentPage++
+			} while (currentPage <= totalPages)
+
+			const isTruncated = actualTotalItems > allReleases.length
+
+			const result: DiscogsCollectionResponse & { partial?: boolean } = {
+				pagination: {
+					pages: totalPages,
+					page: 1,
+					per_page: allReleases.length,
+					items: actualTotalItems || allReleases.length,
+					urls: {} as { last?: string; next?: string },
+				},
+				releases: allReleases,
+				// Only set `partial` when true — absence means complete (tests check `=== undefined`)
+				...(timedOut ? { partial: true } : {}),
+			}
+
+			// Only cache complete results. Partial results are NOT cached at the
+			// complete-collection level — individual pages are already cached by
+			// searchCollection(), so the next call flies through them and continues.
+			if (timedOut) {
+				console.log(
+					`Partial collection: fetched ${allReleases.length} of ${actualTotalItems} items (time budget exhausted).`,
+				)
+			} else {
+				await this.cache.set('collections', cacheKey, result)
+
+				if (isTruncated) {
+					console.log(
+						`Collection truncated: indexed ${allReleases.length} of ${actualTotalItems} items (hit ${maxPages}-page limit).`,
+					)
+				}
+			}
+
+			return result
+		} finally {
+			if (acquiredLock) {
+				await this.releaseFetchLock(lockKey)
+			}
+		}
 	}
 
 	/**

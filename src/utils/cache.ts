@@ -53,6 +53,14 @@ export class SmartCache {
 	}
 
 	/**
+	 * Expose the underlying KV namespace for direct operations
+	 * (e.g. fetch locks that need raw get/put/delete outside the cache layer).
+	 */
+	getKV(): KVNamespace {
+		return this.kv
+	}
+
+	/**
 	 * Generate cache key with proper namespacing
 	 */
 	private getCacheKey(type: keyof CacheConfig, identifier: string): string {

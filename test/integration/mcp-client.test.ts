@@ -19,6 +19,7 @@ const mockMCP_SESSIONS = {
 	put: vi.fn(),
 	get: vi.fn(),
 	list: vi.fn(),
+	delete: vi.fn(),
 }
 
 const mockEnv: Env = {
