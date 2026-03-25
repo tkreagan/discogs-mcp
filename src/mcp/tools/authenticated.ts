@@ -18,6 +18,56 @@ import type { SessionContext } from '../server.js'
 type ReleaseWithRelevance = DiscogsCollectionItem & { relevanceScore?: number }
 
 /**
+ * Extract meaningful filter terms from a semantic query by removing stop words
+ * and short filler words. Used to attempt a best-effort filter before falling
+ * back to the full LLM collection dump.
+ */
+export function extractSemanticFilterTerms(query: string): string[] {
+	const STOP_WORDS = new Set([
+		'a', 'an', 'the', 'and', 'or', 'of', 'for', 'with', 'in', 'on', 'at',
+		'to', 'is', 'it', 'its', 'be', 'by', 'as', 'up', 'do', 'go', 'my',
+		'me', 'we', 'he', 'she', 'so', 'no', 'if', 'but', 'not', 'are', 'was',
+		'that', 'this', 'they', 'them', 'from', 'have', 'had', 'has', 'some',
+		'something', 'anything', 'everything', 'like', 'just', 'more', 'very',
+		'want', 'need', 'give', 'show', 'find', 'get',
+	])
+
+	return query
+		.toLowerCase()
+		.split(/\s+/)
+		.filter((word) => word.length > 2 && !STOP_WORDS.has(word))
+}
+
+/**
+ * Returns true if the query is explicitly asking for a broad/full collection search.
+ * These queries bypass the best-effort semantic filter and go straight to the LLM dump.
+ *
+ * Uses strict matching: the query must be essentially just a broad-search phrase,
+ * optionally surrounded by filler words (please, can you, etc.) and punctuation.
+ * "show all" matches, but "show all Miles Davis" does NOT — that's a real query.
+ */
+export function shouldUseBroadSearch(query: string): boolean {
+	const FILLER_WORDS = new Set(['please', 'can', 'you', 'could', 'would', 'just', 'ok', 'okay', 'yes', 'yeah', 'sure'])
+	const meaningful = query
+		.toLowerCase()
+		.replace(/[^a-z\s]/g, '') // strip punctuation
+		.split(/\s+/)
+		.filter((w) => w.length > 0 && !FILLER_WORDS.has(w))
+		.join(' ')
+		.trim()
+
+	const broadSearchPhrases = new Set([
+		'search more broadly',
+		'show more',
+		'full collection',
+		'broader search',
+		'show everything',
+		'show all',
+	])
+	return broadSearchPhrases.has(meaningful)
+}
+
+/**
  * Filter an array of releases in-memory using the same logic as
  * DiscogsClient.searchCollectionWithQuery(), but without any API calls.
  *
@@ -351,14 +401,30 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 	}
 
 	/**
-	 * Format the full collection compactly so the calling LLM can apply its
-	 * world knowledge to select semantically matching releases.
+	 * Format a representative sample of the collection compactly so the calling
+	 * LLM can apply its world knowledge to select semantically matching releases.
+	 *
+	 * Capped at `maxReleases` (default 750) to avoid blowing up the LLM context.
+	 * When capping, prioritizes rated items (rating desc) then unrated by date_added desc,
+	 * so the LLM sees the user's most valued music first.
 	 */
 	function formatCollectionForSemanticSearch(
 		allReleases: DiscogsCollectionItem[],
 		query: string,
+		maxReleases: number = 750,
 	): { content: Array<{ type: 'text'; text: string }> } {
-		const compactList = allReleases
+		// Prioritize: rated items first (by rating desc), then unrated by date_added desc
+		const sorted = [...allReleases].sort((a, b) => {
+			if (a.rating > 0 && b.rating > 0) return b.rating - a.rating
+			if (a.rating > 0) return -1
+			if (b.rating > 0) return 1
+			return new Date(b.date_added).getTime() - new Date(a.date_added).getTime()
+		})
+
+		const capped = sorted.slice(0, maxReleases)
+		const wasCapped = allReleases.length > maxReleases
+
+		const compactList = capped
 			.map((release) => {
 				const info = release.basic_information
 				const artists = info.artists.map((a) => a.name).join(', ')
@@ -369,15 +435,22 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			})
 			.join('\n')
 
+		const cappedNote = wasCapped
+			? `\n\n⚠️ Showing ${capped.length} of ${allReleases.length} releases (prioritized by rating and recency).`
+			: ''
+
 		return {
 			content: [
 				{
 					type: 'text',
 					text:
-						`**Semantic search mode:** The collection filter could not find direct matches for "${query}". ` +
-						`Below is the complete collection (${allReleases.length} releases). ` +
-						`Please use your knowledge of these artists and albums to select the best matches for the user's intent: "${query}"\n\n` +
-						`${compactList}\n\n` +
+						`**Semantic search mode:** No keyword matches found for "${query}". ` +
+						`Below is the collection (${capped.length} releases).\n\n` +
+						`**Instructions:** Select 8–12 releases that best match the user's intent: "${query}". ` +
+						`Use your knowledge of these artists, albums, and genres to identify the strongest matches. ` +
+						`For each result, include a brief note (1 sentence) explaining why it fits. ` +
+						`If you find fewer than 8 strong matches, return only the ones you're confident about — do not pad with weak matches.\n\n` +
+						`${compactList}${cappedNote}\n\n` +
 						`**Tip:** Use the release IDs with the get_release tool for detailed information about specific albums.`,
 				},
 			],
@@ -386,12 +459,12 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 
 	server.tool(
 		'search_collection',
-		"Search your Discogs collection with natural language queries. IMPORTANT: Pass the user's query as-is — do NOT rewrite, decompose, or make multiple searches. The tool handles semantic/conceptual queries internally (e.g., 'strong empowering female voice', 'perfect for a rainy Sunday') by returning the full collection for you to select from using your knowledge. Also supports mood descriptors like 'mellow jazz', temporal terms like 'recent' or 'oldest', and specific searches by artist, album, genre, or year. One call is sufficient for any query.",
+		"Search your Discogs collection with natural language queries. IMPORTANT: Pass the user's query as-is — do NOT rewrite, decompose, or make multiple searches. The tool handles semantic/conceptual queries internally (e.g., 'strong empowering female voice', 'perfect for a rainy Sunday') by first attempting a keyword match, then returning the collection for LLM-based selection if no matches are found. Also supports mood descriptors like 'mellow jazz', temporal terms like 'recent' or 'oldest', and specific searches by artist, album, genre, or year. One call is sufficient for any query.",
 		{
 			query: z
 				.string()
 				.describe(
-					"The user's search query passed verbatim. Do NOT rewrite or decompose the query — pass it exactly as the user said it. The tool handles semantic queries like 'empowering female vocals' or 'road trip music' by returning the full collection for LLM-based selection.",
+					"The user's search query passed verbatim. Do NOT rewrite or decompose the query — pass it exactly as the user said it. The tool handles semantic queries like 'empowering female vocals' or 'road trip music' by first trying keyword matching, then falling back to collection search if needed.",
 				),
 			per_page: z.number().min(1).max(100).optional().default(50).describe('Number of results to return (1-100)'),
 		},
@@ -488,9 +561,63 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 					}
 
 					// Semantic query detection: if the query is conceptual/descriptive
-					// (not matching artists, albums, genres, or moods), short-circuit
-					// and return the full collection for LLM-based selection.
-					if (isSemanticQuery(query, allReleases)) {
+					// (not matching artists, albums, genres, or moods), try a best-effort
+					// keyword filter first. Only fall back to the capped LLM dump if:
+					// (a) the user explicitly asked for a broader search, or
+					// (b) the best-effort filter found no results.
+					if (isSemanticQuery(query, allReleases) || shouldUseBroadSearch(query)) {
+						if (!shouldUseBroadSearch(query)) {
+							// Best-effort: run filterReleasesInMemory once per extracted term (OR logic)
+							const semanticTerms = extractSemanticFilterTerms(query)
+							const bestEffortResults: DiscogsCollectionItem[] = []
+							const bestEffortSeen = new Set<string>()
+
+							for (const term of semanticTerms) {
+								const termResults = filterReleasesInMemory(allReleases, term)
+								for (const release of termResults) {
+									const key = `${release.id}-${release.instance_id}`
+									if (!bestEffortSeen.has(key)) {
+										bestEffortSeen.add(key)
+										bestEffortResults.push(release)
+									}
+								}
+							}
+
+							if (bestEffortResults.length > 0) {
+								// Sort by rating desc, then date added desc
+								bestEffortResults.sort((a, b) => {
+									if (a.rating !== b.rating) return b.rating - a.rating
+									return new Date(b.date_added).getTime() - new Date(a.date_added).getTime()
+								})
+
+								const finalResults = bestEffortResults.slice(0, per_page)
+								const summary = `Found ${bestEffortResults.length} possible matches for "${query}" in your collection (showing ${finalResults.length} items):`
+
+								const releaseList = finalResults
+									.map((release) => {
+										const info = release.basic_information
+										const artists = info.artists.map((a) => a.name).join(', ')
+										const formats = info.formats.map((f) => f.name).join(', ')
+										const genres = info.genres?.length ? info.genres.join(', ') : 'Unknown'
+										const styles = info.styles?.length ? ` | Styles: ${info.styles.join(', ')}` : ''
+										const rating = release.rating > 0 ? ` ⭐${release.rating}` : ''
+										return `• [ID: ${release.id}] ${artists} - ${info.title} (${info.year})\n  Format: ${formats} | Genre: ${genres}${styles}${rating}`
+									})
+									.join('\n\n')
+
+								const broadSearchHint = `\n\n💡 Showing possible matches based on keywords. If these aren't what you're looking for, ask me to "search more broadly" and I'll look through your full collection.`
+
+								return {
+									content: [{
+										type: 'text' as const,
+										text: `${summary}\n${releaseList}${broadSearchHint}${collectionTruncationNote}`,
+									}],
+								}
+							}
+							// Fall through to capped LLM dump — no best-effort results found
+						}
+
+						// Capped LLM dump: broad search requested, or best-effort found nothing
 						const semanticResult = formatCollectionForSemanticSearch(allReleases, query)
 						if (collectionTruncationNote && semanticResult.content?.[0]?.type === 'text') {
 							semanticResult.content[0].text += collectionTruncationNote
