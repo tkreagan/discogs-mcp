@@ -150,7 +150,7 @@ export class DiscogsClient {
 	private userAgent = 'discogs-mcp/1.0.0'
 	private lastRequestTime = 0
 	private kv: KVNamespace | null = null
-	private static readonly THROTTLE_KEY = 'discogs:last_request_time'
+	private throttleUser: string | null = null
 
 	// Discogs-specific retry configuration (more aggressive than default)
 	private readonly discogsRetryOptions: RetryOptions = {
@@ -163,11 +163,10 @@ export class DiscogsClient {
 
 	// Minimum delay between Discogs API requests (proactive rate limiting).
 	// Discogs allows 60 authenticated requests per minute = 1000ms minimum.
-	// Set to 1500ms for concurrency safety: when multiple MCP tool calls run
-	// concurrently, the KV-based throttle has a read-then-write race condition
-	// that lets two requests slip through simultaneously. At 1500ms each, even
-	// doubled that's ~40 req/min — safely within the 60/min limit.
-	private readonly REQUEST_DELAY_MS = 1500
+	// Reduced from 1500ms to 500ms: fetchWithRetry handles 429s with
+	// exponential backoff, so we can be less conservative on the proactive
+	// side. This roughly halves cold-cache fetch time.
+	private readonly REQUEST_DELAY_MS = 500
 
 	/**
 	 * Set KV namespace for persistent throttling across Worker invocations
@@ -177,16 +176,37 @@ export class DiscogsClient {
 	}
 
 	/**
+	 * Set the user identifier for per-user throttle keys.
+	 * Must be called before making API requests so that each user
+	 * gets their own rate budget (instead of a global shared throttle).
+	 */
+	setThrottleUser(username: string): void {
+		this.throttleUser = username
+	}
+
+	/**
+	 * Get the KV key for this user's throttle timestamp.
+	 * Per-user keys prevent one user's requests from blocking another user.
+	 */
+	private getThrottleKey(): string {
+		return this.throttleUser
+			? `discogs:throttle:${this.throttleUser}`
+			: 'discogs:throttle:global'
+	}
+
+	/**
 	 * Add a delay between requests to proactively avoid rate limits.
 	 * Uses KV storage to persist throttle state across Worker invocations.
+	 * Throttle key is per-user so users don't interfere with each other.
 	 */
 	private async throttleRequest(): Promise<void> {
 		let lastRequestTime = this.lastRequestTime
+		const throttleKey = this.getThrottleKey()
 
 		// Try to get last request time from KV (persistent across invocations)
 		if (this.kv) {
 			try {
-				const stored = await this.kv.get(DiscogsClient.THROTTLE_KEY)
+				const stored = await this.kv.get(throttleKey)
 				if (stored) {
 					lastRequestTime = parseInt(stored, 10)
 				}
@@ -208,11 +228,11 @@ export class DiscogsClient {
 		const newTime = Date.now()
 		this.lastRequestTime = newTime
 
-		// Persist to KV for cross-invocation throttling
+		// Persist to KV for cross-invocation throttling (per-user key)
 		if (this.kv) {
 			try {
 				// Store with short TTL since we only need it for rate limiting
-				await this.kv.put(DiscogsClient.THROTTLE_KEY, newTime.toString(), { expirationTtl: 60 })
+				await this.kv.put(throttleKey, newTime.toString(), { expirationTtl: 60 })
 			} catch (error) {
 				console.warn('Failed to write throttle time to KV:', error)
 			}

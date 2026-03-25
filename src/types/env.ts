@@ -14,9 +14,8 @@ export interface Env {
   // OAuth provider helpers (injected by @cloudflare/workers-oauth-provider at runtime)
   OAUTH_PROVIDER: OAuthHelpers
 
-  // KV namespaces for logging, rate limiting, and sessions
+  // KV namespaces for logging and sessions
   MCP_LOGS: KVNamespace
-  MCP_RL: KVNamespace
   MCP_SESSIONS: KVNamespace
 
   // KV namespace for OAuth provider state (tokens, grants, client registrations)

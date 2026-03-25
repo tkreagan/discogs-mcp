@@ -18,6 +18,22 @@ export function registerResources(server: McpServer, env: Env, getSessionContext
 	const cachedClient = env.MCP_SESSIONS ? new CachedDiscogsClient(discogsClient, env.MCP_SESSIONS) : null
 	const client = cachedClient || discogsClient
 
+	/** Helper: get profile and set per-user throttle key */
+	async function getProfileAndSetThrottle(session: { accessToken: string; accessTokenSecret: string }) {
+		const userProfile = await client.getUserProfile(
+			session.accessToken,
+			session.accessTokenSecret,
+			env.DISCOGS_CONSUMER_KEY,
+			env.DISCOGS_CONSUMER_SECRET,
+		)
+		if (cachedClient) {
+			cachedClient.setThrottleUser(userProfile.username)
+		} else {
+			discogsClient.setThrottleUser(userProfile.username)
+		}
+		return userProfile
+	}
+
 	// List available resources
 	server.registerResource(
 		'collection',
@@ -34,12 +50,7 @@ export function registerResources(server: McpServer, env: Env, getSessionContext
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				// Use getCompleteCollection() when cached client is available
 				// to return the full collection (not just page 1) and benefit
@@ -163,12 +174,7 @@ export function registerResources(server: McpServer, env: Env, getSessionContext
 					throw new Error('Invalid search URI - query parameter is required')
 				}
 
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				// When cached client is available, search against the cached
 				// complete collection instead of triggering a full pagination.
