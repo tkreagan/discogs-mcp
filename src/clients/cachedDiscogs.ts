@@ -34,6 +34,13 @@ export class CachedDiscogsClient {
 	}
 
 	/**
+	 * Forward throttle user to the underlying client so throttle keys are per-user.
+	 */
+	setThrottleUser(username: string): void {
+		this.client.setThrottleUser(username)
+	}
+
+	/**
 	 * Try to acquire a KV-based fetch lock. Returns true if lock was acquired.
 	 * Prevents concurrent getCompleteCollection calls from doubling API usage.
 	 * Uses a short TTL so locks auto-expire if the fetcher crashes.
@@ -53,7 +60,7 @@ export class CachedDiscogsClient {
 			}
 			// Small race window remains (read-then-write), but it's much narrower
 			// than the throttle race. Worst case: two fetchers run, but the wider
-			// throttle delay (1500ms) keeps combined rate within Discogs limits.
+			// throttle delay keeps combined rate within Discogs limits.
 			await kv.put(lockKey, Date.now().toString(), {
 				expirationTtl: this.FETCH_LOCK_TTL,
 			})
@@ -284,7 +291,8 @@ export class CachedDiscogsClient {
 		}
 
 		try {
-			console.log(`Fetching complete collection for ${username} (max ${maxPages} pages, budget ${timeBudgetMs}ms)`)
+			const BATCH_SIZE = 3 // Fetch up to 3 pages concurrently
+			console.log(`Fetching complete collection for ${username} (max ${maxPages} pages, budget ${timeBudgetMs}ms, batch ${BATCH_SIZE})`)
 			const startTime = Date.now()
 			let allReleases: DiscogsCollectionItem[] = []
 			let currentPage = 1
@@ -292,31 +300,53 @@ export class CachedDiscogsClient {
 			let actualTotalItems = 0
 			let timedOut = false
 
-			do {
-				// Only check budget after the first page — we always fetch at least one page
-				if (currentPage > 1 && Date.now() - startTime > timeBudgetMs) {
+			// First page must be fetched alone to learn totalPages
+			const firstPageResult = await this.searchCollection(
+				username,
+				accessToken,
+				accessTokenSecret,
+				{ page: 1, per_page: 100 },
+				consumerKey,
+				consumerSecret,
+			)
+			actualTotalItems = firstPageResult.pagination.items
+			allReleases = allReleases.concat(firstPageResult.releases)
+			totalPages = Math.min(firstPageResult.pagination.pages, maxPages)
+			currentPage = 2
+
+			// Fetch remaining pages in parallel batches
+			while (currentPage <= totalPages) {
+				if (Date.now() - startTime > timeBudgetMs) {
 					console.log(`Time budget exceeded after ${currentPage - 1} pages (${Date.now() - startTime}ms)`)
 					timedOut = true
 					break
 				}
 
-				const pageResult = await this.searchCollection(
-					username,
-					accessToken,
-					accessTokenSecret,
-					{ page: currentPage, per_page: 100 },
-					consumerKey,
-					consumerSecret,
-				)
-
-				if (currentPage === 1) {
-					actualTotalItems = pageResult.pagination.items
+				const batchEnd = Math.min(currentPage + BATCH_SIZE - 1, totalPages)
+				const batchPages: number[] = []
+				for (let p = currentPage; p <= batchEnd; p++) {
+					batchPages.push(p)
 				}
 
-				allReleases = allReleases.concat(pageResult.releases)
-				totalPages = Math.min(pageResult.pagination.pages, maxPages)
-				currentPage++
-			} while (currentPage <= totalPages)
+				const batchResults = await Promise.all(
+					batchPages.map((page) =>
+						this.searchCollection(
+							username,
+							accessToken,
+							accessTokenSecret,
+							{ page, per_page: 100 },
+							consumerKey,
+							consumerSecret,
+						),
+					),
+				)
+
+				for (const pageResult of batchResults) {
+					allReleases = allReleases.concat(pageResult.releases)
+				}
+
+				currentPage = batchEnd + 1
+			}
 
 			const isTruncated = actualTotalItems > allReleases.length
 

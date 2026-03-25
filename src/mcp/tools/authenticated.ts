@@ -288,6 +288,26 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 	const client = cachedClient || discogsClient
 
 	/**
+	 * Helper: get user profile and set per-user throttle key.
+	 * All authenticated tools should use this instead of calling getUserProfile directly.
+	 */
+	async function getProfileAndSetThrottle(session: { accessToken: string; accessTokenSecret: string }) {
+		const userProfile = await client.getUserProfile(
+			session.accessToken,
+			session.accessTokenSecret,
+			env.DISCOGS_CONSUMER_KEY,
+			env.DISCOGS_CONSUMER_SECRET,
+		)
+		// Set per-user throttle so this user's rate budget is independent
+		if (cachedClient) {
+			cachedClient.setThrottleUser(userProfile.username)
+		} else {
+			discogsClient.setThrottleUser(userProfile.username)
+		}
+		return userProfile
+	}
+
+	/**
 	 * Tool: search_collection
 	 * Search user's Discogs collection with mood-aware queries
 	 */
@@ -484,12 +504,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 
 			try {
 				// Get user profile
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				// Check for temporal terms
 				const queryWords = query.toLowerCase().split(/\s+/)
@@ -808,12 +823,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				// Compute stats from cached complete collection when available.
 				// This reuses the same cached dataset as search_collection and
@@ -975,12 +985,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 				moodGenres = [...new Set(moodGenres)]
 				moodStyles = [...new Set(moodStyles)]
 
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				// Get full collection for context-aware recommendations.
 				// Uses getCompleteCollectionReleases() when cached client is available
@@ -1453,12 +1458,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				const folders = await client.listFolders(
 					userProfile.username,
@@ -1509,12 +1509,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				const folder = await client.createFolder(
 					userProfile.username,
@@ -1565,12 +1560,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				const folder = await client.editFolder(
 					userProfile.username,
@@ -1621,12 +1611,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				await client.deleteFolder(
 					userProfile.username,
@@ -1677,12 +1662,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				const result = await client.addToFolder(
 					userProfile.username,
@@ -1735,12 +1715,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				await client.removeFromFolder(
 					userProfile.username,
@@ -1795,12 +1770,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				await client.editInstance(
 					userProfile.username,
@@ -1856,12 +1826,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				await client.editInstance(
 					userProfile.username,
@@ -1913,12 +1878,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				const fields = await client.listCustomFields(
 					userProfile.username,
@@ -1986,12 +1946,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 			}
 
 			try {
-				const userProfile = await client.getUserProfile(
-					session.accessToken,
-					session.accessTokenSecret,
-					env.DISCOGS_CONSUMER_KEY,
-					env.DISCOGS_CONSUMER_SECRET,
-				)
+				const userProfile = await getProfileAndSetThrottle(session)
 
 				await client.editCustomFieldValue(
 					userProfile.username,

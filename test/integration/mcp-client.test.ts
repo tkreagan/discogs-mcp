@@ -9,12 +9,6 @@ const mockMCP_LOGS = {
 	list: vi.fn(),
 }
 
-const mockMCP_RL = {
-	put: vi.fn(),
-	get: vi.fn(),
-	list: vi.fn(),
-}
-
 const mockMCP_SESSIONS = {
 	put: vi.fn(),
 	get: vi.fn(),
@@ -26,7 +20,6 @@ const mockEnv: Env = {
 	DISCOGS_CONSUMER_KEY: 'test-key',
 	DISCOGS_CONSUMER_SECRET: 'test-secret',
 	MCP_LOGS: mockMCP_LOGS as any,
-	MCP_RL: mockMCP_RL as any,
 	MCP_SESSIONS: mockMCP_SESSIONS as any,
 }
 
@@ -277,9 +270,6 @@ describe('MCP Client Integration Tests', () => {
 		vi.clearAllMocks()
 		client = new MockMCPClient()
 
-		// Mock rate limiting to allow requests
-		mockMCP_RL.get.mockResolvedValue(null)
-		mockMCP_RL.put.mockResolvedValue(undefined)
 		mockMCP_LOGS.put.mockResolvedValue(undefined)
 
 		// Mock Discogs API calls
