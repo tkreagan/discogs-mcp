@@ -451,7 +451,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 				const genres = info.genres?.join(', ') || ''
 				const styles = info.styles?.length ? ` | ${info.styles.join(', ')}` : ''
 				const rating = release.rating > 0 ? ` ★${release.rating}` : ''
-				return `[ID:${release.id}|Inst:${release.instance_id}|Fld:${release.folder_id}] ${artists} - ${info.title} (${info.year}) | ${genres}${styles}${rating}`
+				return `[ID:${release.id}|Inst:${release.instance_id}] ${artists} - ${info.title} (${info.year}) | ${genres}${styles}${rating}`
 			})
 			.join('\n')
 
@@ -616,7 +616,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 										const genres = info.genres?.length ? info.genres.join(', ') : 'Unknown'
 										const styles = info.styles?.length ? ` | Styles: ${info.styles.join(', ')}` : ''
 										const rating = release.rating > 0 ? ` ⭐${release.rating}` : ''
-										return `• [ID: ${release.id}] [Instance: ${release.instance_id}] [Folder: ${release.folder_id}] ${artists} - ${info.title} (${info.year})\n  Format: ${formats} | Genre: ${genres}${styles}${rating}`
+										return `• [ID: ${release.id}] [Instance: ${release.instance_id}] ${artists} - ${info.title} (${info.year})\n  Format: ${formats} | Genre: ${genres}${styles}${rating}`
 									})
 									.join('\n\n')
 
@@ -712,7 +712,7 @@ export function registerAuthenticatedTools(server: McpServer, env: Env, getSessi
 						const styles = info.styles?.length ? ` | Styles: ${info.styles.join(', ')}` : ''
 						const rating = release.rating > 0 ? ` ⭐${release.rating}` : ''
 
-						return `• [ID: ${release.id}] [Instance: ${release.instance_id}] [Folder: ${release.folder_id}] ${artists} - ${info.title} (${info.year})\n  Format: ${formats} | Genre: ${genres}${styles}${rating}`
+						return `• [ID: ${release.id}] [Instance: ${release.instance_id}] ${artists} - ${info.title} (${info.year})\n  Format: ${formats} | Genre: ${genres}${styles}${rating}`
 					})
 					.join('\n\n')
 

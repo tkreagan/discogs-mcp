@@ -47,7 +47,7 @@ export interface DiscogsRelease {
 export interface DiscogsCollectionItem {
 	id: number
 	instance_id: number
-	folder_id: number
+	folder_id?: number
 	date_added: string
 	rating: number
 	basic_information: {
