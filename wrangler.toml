@@ -9,19 +9,19 @@ enabled = true
 # Development environment (default)
 [[kv_namespaces]]
 binding = "MCP_LOGS"
-id = "b0c83f4b63a94c7490a609095e35b84f"
+id = "0dca19b778704fa59cb5e81b75fe974f"
 
 [[kv_namespaces]]
 binding = "MCP_RL"
-id = "b4caaaa688cc45d2a9a85fe67ba53bfc"
+id = "fc992d3d72bc47cf8a481f3255bcaf05"
 
 [[kv_namespaces]]
 binding = "MCP_SESSIONS"
-id = "a0bc40f523d54a6ab70fa947ac3daeaf"
+id = "53510d8b2d2448c5bca97ade996ac52c"
 
 [[kv_namespaces]]
 binding = "OAUTH_KV"
-id = "e04a5ec5441949ebb6e84281bf6598c3"
+id = "6ced148a309f4aaeb4eca0d2083c3aa5"
 
 # Production environment
 [env.production]
@@ -29,19 +29,19 @@ name = "discogs-mcp-prod"
 
 [[env.production.kv_namespaces]]
 binding = "MCP_LOGS"
-id = "768f383bd9a54f8c837decbaeb869b68"
+id = "0dca19b778704fa59cb5e81b75fe974f"
 
 [[env.production.kv_namespaces]]
 binding = "MCP_RL"
-id = "bfc831cedceb4a08a6d997909c3899ce"
+id = "fc992d3d72bc47cf8a481f3255bcaf05"
 
 [[env.production.kv_namespaces]]
 binding = "MCP_SESSIONS"
-id = "e45edcc5347e4b409169c1d0a9b2ed5d"
+id = "53510d8b2d2448c5bca97ade996ac52c"
 
 [[env.production.kv_namespaces]]
 binding = "OAUTH_KV"
-id = "35c396a7d0924dd8a5527334cd4538d3"
+id = "6ced148a309f4aaeb4eca0d2083c3aa5"
 
 # Secrets (set via wrangler secret put):
 # - DISCOGS_CONSUMER_KEY
