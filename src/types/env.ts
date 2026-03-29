@@ -7,6 +7,7 @@ export interface Env {
   // Discogs OAuth credentials
   DISCOGS_CONSUMER_KEY: string
   DISCOGS_CONSUMER_SECRET: string
+	MCP_ACCESS_TOKEN: string
 
   // JWT secret for legacy session-based handler (src/index.ts)
   JWT_SECRET: string
