@@ -186,18 +186,18 @@ export default {
 
     // /mcp — session routing (applies to both GET and POST)
     if (url.pathname === '/mcp') {
-       // 0. Static Bearer token check — rejects unauthorized requests before any session/OAuth logic
-  		const authHeader = request.headers.get('Authorization')
-  		const token = authHeader?.replace('Bearer ', '').trim()
-  		if (token !== env.MCP_ACCESS_TOKEN) {
-   			return new Response(JSON.stringify({ error: 'invalid_token', error_description: 'Missing or invalid access token' }), {
-      		status: 401,
-      		headers: {
-        	'Content-Type': 'application/json',
-        	'Access-Control-Allow-Origin': '*',
-      		},
-    		})
-  		}
+    //    // 0. Static Bearer token check — rejects unauthorized requests before any session/OAuth logic
+  		// const authHeader = request.headers.get('Authorization')
+  		// const token = authHeader?.replace('Bearer ', '').trim()
+  		// if (token !== env.MCP_ACCESS_TOKEN) {
+   	// 		return new Response(JSON.stringify({ error: 'invalid_token', error_description: 'Missing or invalid access token' }), {
+    //   		status: 401,
+    //   		headers: {
+    //     	'Content-Type': 'application/json',
+    //     	'Access-Control-Allow-Origin': '*',
+    //   		},
+    // 		})
+  		// }
 
 			
 			
